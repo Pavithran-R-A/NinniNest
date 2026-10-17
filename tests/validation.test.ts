@@ -115,7 +115,13 @@ describe('demo isolation', () => {
       babies: [baby],
       events: [demo, personal] as unknown as CareEvent[],
       activeTimers: [],
-      schemaVersion: 2,
+      growthRecords: [],
+      milestones: [],
+      medications: [],
+      medicationAdministrations: [],
+      vaccinations: [],
+      routines: [],
+      schemaVersion: 3,
     };
     const personalEvents = data.events.filter((e) => !e.isDemo);
     expect(personalEvents).toHaveLength(1);

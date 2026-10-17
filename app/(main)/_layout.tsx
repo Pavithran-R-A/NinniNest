@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Milk, Moon, BookOpen, Settings } from 'lucide-react-native';
+import { Milk, Moon, BookOpen, Settings, Baby } from 'lucide-react-native';
 import { useTheme } from '@/src/design/ThemeProvider';
 
 export default function MainTabsLayout() {
@@ -38,6 +38,13 @@ export default function MainTabsLayout() {
         options={{
           title: 'Handoff',
           tabBarIcon: ({ size, color }) => <Moon size={size} color={color} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="family"
+        options={{
+          title: 'Family',
+          tabBarIcon: ({ size, color }) => <Baby size={size} color={color} strokeWidth={2} />,
         }}
       />
       <Tabs.Screen

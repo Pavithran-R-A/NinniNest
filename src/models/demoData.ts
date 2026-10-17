@@ -56,7 +56,7 @@ export function buildDemoData(): AppData {
     },
   ];
 
-  return { babies: [baby], events, activeTimers, schemaVersion: 2 };
+  return { babies: [baby], events, activeTimers, growthRecords: [], milestones: [], medications: [], medicationAdministrations: [], vaccinations: [], routines: [], schemaVersion: 3 };
 }
 
 export const DEMO_BABY_ID_CONSTANT = DEMO_BABY_ID;

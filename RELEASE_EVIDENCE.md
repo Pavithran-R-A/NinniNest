@@ -1,6 +1,75 @@
 # RELEASE_EVIDENCE.md
 
-Recorded: 2026-10-17 · PROMPT A slice + Phase B (complete care logging)
+Recorded: 2026-10-17 · PROMPT A slice + Phase B + Phase C (family & development)
+
+## Phase C verification evidence
+
+| Command | Result |
+| --- | --- |
+| `npx tsc --noEmit` (strict) | exit 0 |
+| `npm test` (vitest) | exit 0 — **80/80 tests passed** (8 files) |
+| `npx expo export --platform web` | exit 0 |
+| `npx expo-doctor` | exit 0 — 21/21 checks (after fixing expo-sqlite version) |
+
+### Part A audit findings (with evidence)
+
+1. **Dependency audit:** expo-doctor initially failed on expo-sqlite 58.0.13 (expected
+   ~57.0.4 for SDK 57). Fixed by `npm install expo-sqlite@~57.0.4`; re-run shows 21/21.
+2. **Web bundle independence:** searched the exported entry JS for `wa-sqlite`,
+   `.wasm`, `openDatabaseAsync`, `expo-sqlite` — zero matches in the web entry. The
+   IndexedDB repository class is bundled standalone and the SQLite worker/wasm asset is
+   emitted as a separate lazily-fetched file only. Genuinely independent web storage.
+3. **Migration testing:** `tests/migration.test.ts` covers (a) fresh v3 install shape,
+   (b) legacy single-start timer backfill to one running segment, (c) v2→v3 preserving
+   baby profiles, timer segments, `side` and `lastSide` values. The SQLite `init()`
+   implements the real ladder: v1→v2 (ALTER + backfill), v2→v3 (`PRAGMA table_info`
+   before ALTER, idempotent `CREATE TABLE IF NOT EXISTS`), meta version updated once.
+   The IndexedDB adapter upgrades v1/v2 backups in place on `loadAll()`.
+4. **Data-loss bugs found and fixed:** one — stopping a pump timer used to save
+   `amountMl: 0`, discarding nothing only because no amount was captured at all; Phase B
+   already added the finish sheet. No migration data-loss bugs found in this pass: the
+   v2→v3 migration is additive only (new columns/tables; no DROP/DELETE/RENAME).
+5. **Web preview:** not achievable here — this environment has no browser or screenshot
+   tool and Bolt's preview pane is not reachable from the sandbox (same environmental
+   blocker diagnosed in the PROMPT A pass). Recorded as a limitation, not claimed.
+
+### Phase C features — implemented, with test evidence
+
+- **Multiple baby profiles** (`app/(main)/family.tsx`, Profiles tab): creation, editing,
+  switching, deletion. Tests: `phaseC.test.ts` — events/growth scoped by babyId; malformed
+  birth date rejected; deletion contract lists all 9 tables touched.
+- **Growth tracking** (`src/models/growth.ts`, Growth tab): canonical grams/cm with
+  kg·lb and cm·in conversion at input/display only. Tests: weight-only record accepted;
+  measurement-less record rejected; absurd values rejected; bad dates rejected; gram↔lb
+  and cm↔in round trips; metric/imperial formatting; sorted trend construction; age-in-days.
+- **Milestones & memories** (Milestones tab): categories incl. custom, editable dates,
+  notes, photoUri persistence, year-grouped SectionList. Tests: acceptance, empty-title
+  rejection, bad-date rejection, photoUri round trip.
+- **Medication records** (Health tab): explicit administration only. Tests: user-entered
+  med accepted; empty name rejected; administration references its medication; deleting a
+  medication cascades to its administrations (prevents orphaned dose history).
+- **Vaccination history** (Health tab): tests cover complete record acceptance and
+  invalid-name/date rejection.
+- **Daily routines** (Routines tab): tests cover day-of-week recurrence (2026-10-17 =
+  Saturday), paused routines never firing, local-time sorting, and the template contract
+  (routines never create journal records).
+- **Demo-mode isolation** regression: `validation.test.ts` + `demoData.test.ts` still
+  green — demo events flagged and isolated, personal events untouched.
+- **Phase A/B regression**: all 51 prior tests remain passing unchanged.
+
+### Honest limitations
+
+- **No runtime/device claims:** no Android APK, iOS build, or real-device run was
+  possible. All 80 passing tests prove the pure logic (maths, validation, upgrade
+  paths) — they do not prove Android or iOS behaviour.
+- **No rendered browser test:** the UI was verified by code review and by confirming the
+  exported web bundle contains the Family screen code paths; no human clicked through it.
+- Navigation journeys (Family tab switching, baby chip switching, sheets) are
+  code-verified only.
+
+---
+
+# Earlier: Phase B (2026-10-17)
 
 ## Phase B verification evidence
 

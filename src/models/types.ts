@@ -3,6 +3,8 @@ export interface Baby {
   name: string;
   birthDate: string; // YYYY-MM-DD
   createdAt: string; // ISO UTC
+  photoUri?: string;
+  preferredUnits?: 'metric' | 'imperial';
   isDemo?: boolean;
 }
 
@@ -102,9 +104,97 @@ export interface ActiveTimer {
   isDemo?: boolean;
 }
 
+// ---- Phase C ----
+
+// Canonical: grams + cm. lb/oz and in are display-only.
+export interface GrowthRecord {
+  id: string;
+  babyId: string;
+  date: string; // YYYY-MM-DD
+  weightGrams?: number; // 250–25000
+  heightCm?: number; // 20–200
+  headCircumferenceCm?: number; // 20–60
+  note?: string;
+  isDemo?: boolean;
+}
+
+export type MilestoneCategory =
+  | 'motor'
+  | 'social'
+  | 'language'
+  | 'cognitive'
+  | 'feeding'
+  | 'custom';
+
+export interface MilestoneRecord {
+  id: string;
+  babyId: string;
+  category: MilestoneCategory;
+  title: string;
+  date: string; // YYYY-MM-DD (may be approximate)
+  note?: string;
+  photoUri?: string; // app-managed file on native; data URL on web
+  isDemo?: boolean;
+}
+
+export interface MedicationRecord {
+  id: string;
+  babyId: string;
+  name: string; // user-entered
+  instructions?: string; // user-entered prescription text; never generated
+  doseAmount?: number;
+  doseUnit?: 'ml' | 'mg' | 'drops' | 'tablets';
+  notes?: string;
+  isDemo?: boolean;
+}
+
+export interface MedicationAdministration {
+  id: string;
+  babyId: string;
+  medicationId: string;
+  timestamp: string; // ISO UTC
+  doseAmount?: number;
+  doseUnit?: 'ml' | 'mg' | 'drops' | 'tablets';
+  note?: string;
+  isDemo?: boolean;
+}
+
+export interface VaccinationRecord {
+  id: string;
+  babyId: string;
+  name: string;
+  dateGiven: string; // YYYY-MM-DD
+  nextAppointment?: string; // YYYY-MM-DD
+  provider?: string;
+  notes?: string;
+  isDemo?: boolean;
+}
+
+export type RoutineKind = 'feed' | 'nap' | 'pump' | 'tummy_time' | 'reminder';
+
+export interface RoutineTemplate {
+  id: string;
+  babyId: string;
+  title: string;
+  kind: RoutineKind;
+  timeOfDay: string; // "HH:mm" local
+  days: number[]; // 0=Sunday..6=Saturday
+  active: boolean;
+  isDemo?: boolean;
+}
+
 export interface AppData {
   babies: Baby[];
   events: CareEvent[];
   activeTimers: ActiveTimer[];
-  schemaVersion: 2;
+  growthRecords: GrowthRecord[];
+  milestones: MilestoneRecord[];
+  medications: MedicationRecord[];
+  medicationAdministrations: MedicationAdministration[];
+  vaccinations: VaccinationRecord[];
+  routines: RoutineTemplate[];
+  schemaVersion: 3;
 }
+
+export const GRAMS_PER_LB = 453.592;
+export const CM_PER_IN = 2.54;

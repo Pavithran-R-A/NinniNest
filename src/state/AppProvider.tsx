@@ -1,10 +1,17 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createRepository } from '@/src/data/repositoryFactory';
 import type { CareRepository } from '@/src/data/CareRepository';
-import type { ActiveTimer, AppData, Baby, CareEvent } from '@/src/models/types';
+import type {
+  ActiveTimer, AppData, Baby, CareEvent, GrowthRecord, MedicationAdministration,
+  MedicationRecord, MilestoneRecord, RoutineTemplate, VaccinationRecord,
+} from '@/src/models/types';
 import { buildDemoData, DEMO_BABY_ID_CONSTANT } from '@/src/models/demoData';
-import { validateEvent, validateBaby, validateTimer } from '@/src/models/validation';
+import {
+  validateEvent, validateBaby, validateTimer, validateGrowth, validateMilestone,
+  validateMedication, validateMedicationAdministration, validateVaccination, validateRoutine,
+} from '@/src/models/validation';
 import {
   timerElapsedMinutes,
   pauseTimer,
@@ -16,6 +23,8 @@ import type { ThemeMode } from '@/src/design/tokens';
 
 type Status = 'loading' | 'ready' | 'error';
 
+const ACTIVE_BABY_KEY = 'ninninest.activeBabyId';
+
 interface AppContextValue {
   status: Status;
   error: string | null;
@@ -23,10 +32,14 @@ interface AppContextValue {
   data: AppData;
   isDemo: boolean;
   currentBaby: Baby | null;
+  currentBabyId: string | null;
+  setActiveBaby: (id: string) => void;
   themeMode: ThemeMode;
   setThemeMode: (m: ThemeMode) => void;
   refresh: () => Promise<void>;
   addBaby: (baby: Baby) => Promise<boolean>;
+  updateBaby: (baby: Baby) => Promise<boolean>;
+  deleteBaby: (id: string) => Promise<boolean>;
   addEvent: (e: CareEvent) => Promise<boolean>;
   updateEvent: (e: CareEvent) => Promise<boolean>;
   deleteEvent: (id: string) => Promise<boolean>;
@@ -39,6 +52,18 @@ interface AppContextValue {
   pauseActiveTimer: (timerId: string) => Promise<boolean>;
   resumeActiveTimer: (timerId: string) => Promise<boolean>;
   switchActiveTimerSide: (timerId: string, side: 'left' | 'right') => Promise<boolean>;
+  addGrowthRecord: (g: GrowthRecord) => Promise<boolean>;
+  deleteGrowthRecord: (id: string) => Promise<boolean>;
+  addMilestone: (m: MilestoneRecord) => Promise<boolean>;
+  deleteMilestone: (id: string) => Promise<boolean>;
+  addMedication: (m: MedicationRecord) => Promise<boolean>;
+  deleteMedication: (id: string) => Promise<boolean>;
+  addMedicationAdministration: (a: MedicationAdministration) => Promise<boolean>;
+  deleteMedicationAdministration: (id: string) => Promise<boolean>;
+  addVaccination: (v: VaccinationRecord) => Promise<boolean>;
+  deleteVaccination: (id: string) => Promise<boolean>;
+  addRoutine: (r: RoutineTemplate) => Promise<boolean>;
+  deleteRoutine: (id: string) => Promise<boolean>;
   enterDemo: () => Promise<void>;
   exitDemo: () => Promise<void>;
   resetPersonal: () => Promise<void>;
@@ -48,7 +73,11 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-const EMPTY: AppData = { babies: [], events: [], activeTimers: [], schemaVersion: 2 };
+const EMPTY: AppData = {
+  babies: [], events: [], activeTimers: [], growthRecords: [], milestones: [],
+  medications: [], medicationAdministrations: [], vaccinations: [], routines: [],
+  schemaVersion: 3,
+};
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const repo = useMemo(() => createRepository(), []);
@@ -56,6 +85,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AppData>(EMPTY);
   const [isDemo, setIsDemo] = useState(false);
+  const [activeBabyId, setActiveBabyIdState] = useState<string | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>('day');
 
   const refresh = useCallback(async () => {
@@ -72,7 +102,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return { ...validated, segments: sanitizeSegments(validated.segments) };
           })
           .filter((t): t is ActiveTimer => t !== null),
-        schemaVersion: 2,
+        growthRecords: (loaded.growthRecords ?? [])
+          .map(validateGrowth)
+          .filter((g): g is GrowthRecord => g !== null),
+        milestones: (loaded.milestones ?? [])
+          .map(validateMilestone)
+          .filter((m): m is MilestoneRecord => m !== null),
+        medications: (loaded.medications ?? [])
+          .map(validateMedication)
+          .filter((m): m is MedicationRecord => m !== null),
+        medicationAdministrations: (loaded.medicationAdministrations ?? [])
+          .map(validateMedicationAdministration)
+          .filter((a): a is MedicationAdministration => a !== null),
+        vaccinations: (loaded.vaccinations ?? [])
+          .map(validateVaccination)
+          .filter((v): v is VaccinationRecord => v !== null),
+        routines: (loaded.routines ?? [])
+          .map(validateRoutine)
+          .filter((r): r is RoutineTemplate => r !== null),
+        schemaVersion: 3,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not read saved data');
@@ -81,17 +129,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [repo]);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         await repo.init();
+        const stored = await AsyncStorage.getItem(ACTIVE_BABY_KEY).catch(() => null);
+        if (!cancelled && stored) setActiveBabyIdState(stored);
         await refresh();
-        setStatus('ready');
+        if (!cancelled) setStatus('ready');
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not open local storage');
-        setStatus('error');
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Could not open local storage');
+          setStatus('error');
+        }
       }
     })();
     return () => {
+      cancelled = true;
       repo.close().catch(() => {});
     };
   }, [repo, refresh]);
@@ -119,6 +173,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (isDemo) return false;
       try {
         await repo.addBaby(baby);
+        setActiveBabyIdState(baby.id);
+        AsyncStorage.setItem(ACTIVE_BABY_KEY, baby.id).catch(() => {});
         await refresh();
         return true;
       } catch {
@@ -126,6 +182,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [repo, refresh, isDemo]
+  );
+
+  const updateBaby = useCallback(
+    async (baby: Baby) => {
+      if (isDemo && !baby.isDemo) return false;
+      try {
+        await repo.updateBaby(baby);
+        await refresh();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [repo, refresh, isDemo]
+  );
+
+  const deleteBaby = useCallback(
+    async (id: string) => {
+      if (isDemo) return false;
+      try {
+        await repo.deleteBaby(id);
+        if (activeBabyId === id) {
+          setActiveBabyIdState(null);
+          AsyncStorage.removeItem(ACTIVE_BABY_KEY).catch(() => {});
+        }
+        await refresh();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [repo, refresh, isDemo, activeBabyId]
   );
 
   const deleteEvent = useCallback(
@@ -239,10 +327,75 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [repo, refresh, data.activeTimers]
   );
 
+  // Generic Phase C persistence; validates at the boundary and refreshes state.
+  const usePhaseCCrud = <T extends { id: string; babyId: string; isDemo?: boolean }>(
+    add: (item: T) => Promise<void>,
+    del: (id: string) => Promise<void>
+  ) => ({
+    addFn: useCallback(
+      async (item: T) => {
+        if (isDemo && !item.isDemo) return false;
+        try {
+          await add(item);
+          await refresh();
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      [add, refresh, isDemo]
+    ),
+    deleteFn: useCallback(
+      async (id: string) => {
+        try {
+          await del(id);
+          await refresh();
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      [del, refresh]
+    ),
+  });
+
+  const growthCrud = usePhaseCCrud<GrowthRecord>(
+    (g) => repo.addGrowthRecord(g),
+    (id) => repo.deleteGrowthRecord(id)
+  );
+  const milestoneCrud = usePhaseCCrud<MilestoneRecord>(
+    (m) => repo.addMilestone(m),
+    (id) => repo.deleteMilestone(id)
+  );
+  const medicationCrud = usePhaseCCrud<MedicationRecord>(
+    (m) => repo.addMedication(m),
+    (id) => repo.deleteMedication(id)
+  );
+  const administrationCrud = usePhaseCCrud<MedicationAdministration>(
+    (a) => repo.addMedicationAdministration(a),
+    (id) => repo.deleteMedicationAdministration(id)
+  );
+  const vaccinationCrud = usePhaseCCrud<VaccinationRecord>(
+    (v) => repo.addVaccination(v),
+    (id) => repo.deleteVaccination(id)
+  );
+  const routineCrud = usePhaseCCrud<RoutineTemplate>(
+    (r) => repo.addRoutine(r),
+    (id) => repo.deleteRoutine(id)
+  );
+
   const currentBaby = useMemo(() => {
     if (isDemo) return data.babies.find((b) => b.id === DEMO_BABY_ID_CONSTANT) ?? null;
-    return data.babies.find((b) => !b.isDemo) ?? null;
-  }, [data.babies, isDemo]);
+    const candidates = data.babies.filter((b) => !b.isDemo);
+    if (candidates.length === 0) return null;
+    const explicit = activeBabyId ? candidates.find((b) => b.id === activeBabyId) : undefined;
+    return explicit ?? candidates[0];
+  }, [data.babies, isDemo, activeBabyId]);
+
+  const setActiveBaby = useCallback((id: string) => {
+    setActiveBabyIdState(id);
+    AsyncStorage.setItem(ACTIVE_BABY_KEY, id).catch(() => {});
+  }, []);
 
   const enterDemo = useCallback(async () => {
     try {
@@ -268,6 +421,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       await repo.replaceAll(EMPTY);
       setIsDemo(false);
+      setActiveBabyIdState(null);
+      AsyncStorage.removeItem(ACTIVE_BABY_KEY).catch(() => {});
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not erase data');
@@ -286,7 +441,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (babies.length === 0) {
           return { ok: false, message: 'No valid baby profiles found in the file.' };
         }
-        await repo.replaceAll({ babies, events, activeTimers: [], schemaVersion: 2 });
+        await repo.replaceAll({
+          babies,
+          events,
+          activeTimers: [],
+          growthRecords: (parsed.growthRecords ?? []).map(validateGrowth).filter((g): g is GrowthRecord => g !== null),
+          milestones: (parsed.milestones ?? []).map(validateMilestone).filter((m): m is MilestoneRecord => m !== null),
+          medications: (parsed.medications ?? []).map(validateMedication).filter((m): m is MedicationRecord => m !== null),
+          medicationAdministrations: (parsed.medicationAdministrations ?? [])
+            .map(validateMedicationAdministration)
+            .filter((a): a is MedicationAdministration => a !== null),
+          vaccinations: (parsed.vaccinations ?? []).map(validateVaccination).filter((v): v is VaccinationRecord => v !== null),
+          routines: (parsed.routines ?? []).map(validateRoutine).filter((r): r is RoutineTemplate => r !== null),
+          schemaVersion: 3,
+        });
         setIsDemo(false);
         await refresh();
         return { ok: true, message: `Imported ${babies.length} profile and ${events.length} events.` };
@@ -298,13 +466,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const exportJson = useCallback(async () => {
-    return JSON.stringify({ ...data, exportedAt: new Date().toISOString(), app: 'NinniNest', schemaVersion: 2 }, null, 2);
+    return JSON.stringify({ ...data, exportedAt: new Date().toISOString(), app: 'NinniNest', schemaVersion: 3 }, null, 2);
   }, [data]);
 
   const value: AppContextValue = {
-    status, error, repo, data, isDemo, currentBaby, themeMode, setThemeMode,
-    refresh, addBaby, addEvent, updateEvent, deleteEvent, addTimer, updateTimer, stopTimer,
+    status, error, repo, data, isDemo, currentBaby,
+    currentBabyId: currentBaby?.id ?? null,
+    setActiveBaby,
+    themeMode, setThemeMode,
+    refresh, addBaby, updateBaby, deleteBaby,
+    addEvent, updateEvent, deleteEvent, addTimer, updateTimer, stopTimer,
     pauseActiveTimer, resumeActiveTimer, switchActiveTimerSide,
+    addGrowthRecord: growthCrud.addFn,
+    deleteGrowthRecord: growthCrud.deleteFn,
+    addMilestone: milestoneCrud.addFn,
+    deleteMilestone: milestoneCrud.deleteFn,
+    addMedication: medicationCrud.addFn,
+    deleteMedication: medicationCrud.deleteFn,
+    addMedicationAdministration: administrationCrud.addFn,
+    deleteMedicationAdministration: administrationCrud.deleteFn,
+    addVaccination: vaccinationCrud.addFn,
+    deleteVaccination: vaccinationCrud.deleteFn,
+    addRoutine: routineCrud.addFn,
+    deleteRoutine: routineCrud.deleteFn,
     enterDemo, exitDemo, resetPersonal, importData, exportJson,
   };
 

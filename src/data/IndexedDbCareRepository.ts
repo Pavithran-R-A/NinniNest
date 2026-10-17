@@ -1,4 +1,7 @@
-import type { ActiveTimer, AppData, Baby, CareEvent } from '../models/types';
+import type {
+  ActiveTimer, AppData, Baby, CareEvent, GrowthRecord, MedicationAdministration,
+  MedicationRecord, MilestoneRecord, RoutineTemplate, VaccinationRecord,
+} from '../models/types';
 import type { CareRepository } from './CareRepository';
 
 const DB_NAME = 'ninninest-web';
@@ -34,6 +37,12 @@ function get<T>(db: IDBDatabase, key: string): Promise<T | undefined> {
   });
 }
 
+const EMPTY_V3: AppData = {
+  babies: [], events: [], activeTimers: [], growthRecords: [], milestones: [],
+  medications: [], medicationAdministrations: [], vaccinations: [], routines: [],
+  schemaVersion: 3,
+};
+
 export class IndexedDbCareRepository implements CareRepository {
   private db: IDBDatabase | null = null;
 
@@ -48,8 +57,21 @@ export class IndexedDbCareRepository implements CareRepository {
 
   async loadAll(): Promise<AppData> {
     const db = this.assert();
-    const data = await get<AppData>(db, 'appData');
-    return data ?? { babies: [], events: [], activeTimers: [], schemaVersion: 2 };
+    const data = await get<Partial<AppData>>(db, 'appData');
+    if (!data) return { ...EMPTY_V3 };
+    // v1/v2 web data (missing Phase C arrays) upgrades in place to v3.
+    return {
+      babies: data.babies ?? [],
+      events: data.events ?? [],
+      activeTimers: data.activeTimers ?? [],
+      growthRecords: data.growthRecords ?? [],
+      milestones: data.milestones ?? [],
+      medications: data.medications ?? [],
+      medicationAdministrations: data.medicationAdministrations ?? [],
+      vaccinations: data.vaccinations ?? [],
+      routines: data.routines ?? [],
+      schemaVersion: 3,
+    };
   }
 
   private async saveAll(mutator: (data: AppData) => void): Promise<void> {
@@ -59,12 +81,27 @@ export class IndexedDbCareRepository implements CareRepository {
     await put(db, 'appData', data);
   }
 
-  async addBaby(baby: Baby): Promise<void> {
+  private async upsert<T extends { id: string }>(
+    list: keyof AppData, item: T
+  ): Promise<void> {
     await this.saveAll((d) => {
-      const i = d.babies.findIndex((b) => b.id === baby.id);
-      if (i >= 0) d.babies[i] = baby;
-      else d.babies.push(baby);
+      const arr = d[list] as unknown as T[];
+      const i = arr.findIndex((x) => x.id === item.id);
+      if (i >= 0) arr[i] = item;
+      else arr.push(item);
     });
+  }
+
+  private async removeById(list: keyof AppData, id: string): Promise<void> {
+    await this.saveAll((d) => {
+      const arr = d[list] as unknown as { id: string }[];
+      const i = arr.findIndex((x) => x.id === id);
+      if (i >= 0) arr.splice(i, 1);
+    });
+  }
+
+  async addBaby(baby: Baby): Promise<void> {
+    await this.upsert('babies', baby);
   }
 
   async updateBaby(baby: Baby): Promise<void> {
@@ -76,15 +113,17 @@ export class IndexedDbCareRepository implements CareRepository {
       d.babies = d.babies.filter((b) => b.id !== babyId);
       d.events = d.events.filter((e) => e.babyId !== babyId);
       d.activeTimers = d.activeTimers.filter((t) => t.babyId !== babyId);
+      d.growthRecords = d.growthRecords.filter((g) => g.babyId !== babyId);
+      d.milestones = d.milestones.filter((m) => m.babyId !== babyId);
+      d.medications = d.medications.filter((m) => m.babyId !== babyId);
+      d.medicationAdministrations = d.medicationAdministrations.filter((a) => a.babyId !== babyId);
+      d.vaccinations = d.vaccinations.filter((v) => v.babyId !== babyId);
+      d.routines = d.routines.filter((r) => r.babyId !== babyId);
     });
   }
 
   async addEvent(event: CareEvent): Promise<void> {
-    await this.saveAll((d) => {
-      const i = d.events.findIndex((e) => e.id === event.id);
-      if (i >= 0) d.events[i] = event;
-      else d.events.push(event);
-    });
+    await this.upsert('events', event);
   }
 
   async updateEvent(event: CareEvent): Promise<void> {
@@ -92,27 +131,74 @@ export class IndexedDbCareRepository implements CareRepository {
   }
 
   async deleteEvent(eventId: string): Promise<void> {
-    await this.saveAll((d) => {
-      d.events = d.events.filter((e) => e.id !== eventId);
-    });
+    await this.removeById('events', eventId);
   }
 
   async addTimer(timer: ActiveTimer): Promise<void> {
-    await this.saveAll((d) => {
-      const i = d.activeTimers.findIndex((t) => t.id === timer.id);
-      if (i >= 0) d.activeTimers[i] = timer;
-      else d.activeTimers.push(timer);
-    });
+    await this.upsert('activeTimers', timer);
   }
 
   async deleteTimer(timerId: string): Promise<void> {
+    await this.removeById('activeTimers', timerId);
+  }
+
+  async addGrowthRecord(record: GrowthRecord): Promise<void> {
+    await this.upsert('growthRecords', record);
+  }
+
+  async deleteGrowthRecord(id: string): Promise<void> {
+    await this.removeById('growthRecords', id);
+  }
+
+  async addMilestone(record: MilestoneRecord): Promise<void> {
+    await this.upsert('milestones', record);
+  }
+
+  async deleteMilestone(id: string): Promise<void> {
+    await this.removeById('milestones', id);
+  }
+
+  async addMedication(record: MedicationRecord): Promise<void> {
+    await this.upsert('medications', record);
+  }
+
+  async deleteMedication(id: string): Promise<void> {
     await this.saveAll((d) => {
-      d.activeTimers = d.activeTimers.filter((t) => t.id !== timerId);
+      d.medications = d.medications.filter((m) => m.id !== id);
+      d.medicationAdministrations = d.medicationAdministrations.filter((a) => a.medicationId !== id);
     });
   }
 
+  async addMedicationAdministration(record: MedicationAdministration): Promise<void> {
+    await this.upsert('medicationAdministrations', record);
+  }
+
+  async deleteMedicationAdministration(id: string): Promise<void> {
+    await this.removeById('medicationAdministrations', id);
+  }
+
+  async addVaccination(record: VaccinationRecord): Promise<void> {
+    await this.upsert('vaccinations', record);
+  }
+
+  async deleteVaccination(id: string): Promise<void> {
+    await this.removeById('vaccinations', id);
+  }
+
+  async addRoutine(record: RoutineTemplate): Promise<void> {
+    await this.upsert('routines', record);
+  }
+
+  async deleteRoutine(id: string): Promise<void> {
+    await this.removeById('routines', id);
+  }
+
   async replaceAll(data: AppData): Promise<void> {
-    await put(this.assert(), 'appData', data);
+    await put(this.assert(), 'appData', {
+      ...EMPTY_V3,
+      ...data,
+      schemaVersion: 3,
+    });
   }
 
   async close(): Promise<void> {

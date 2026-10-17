@@ -1,8 +1,11 @@
 import * as SQLite from 'expo-sqlite';
-import type { ActiveTimer, AppData, Baby, CareEvent } from '../models/types';
+import type {
+  ActiveTimer, AppData, Baby, CareEvent, GrowthRecord, MedicationAdministration,
+  MedicationRecord, MilestoneRecord, RoutineTemplate, VaccinationRecord,
+} from '../models/types';
 import type { CareRepository } from './CareRepository';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export class SqliteCareRepository implements CareRepository {
   private db: SQLite.SQLiteDatabase | null = null;
@@ -17,6 +20,8 @@ export class SqliteCareRepository implements CareRepository {
         name TEXT NOT NULL,
         birthDate TEXT NOT NULL,
         createdAt TEXT NOT NULL,
+        photoUri TEXT,
+        preferredUnits TEXT,
         isDemo INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS events (
@@ -38,6 +43,7 @@ export class SqliteCareRepository implements CareRepository {
         isDemo INTEGER NOT NULL DEFAULT 0
       );
     `);
+    await this.ensurePhaseCTables();
     const row = await this.db.getFirstAsync<{ value: string }>(
       'SELECT value FROM meta WHERE key = ?',
       ['schema_version']
@@ -47,37 +53,132 @@ export class SqliteCareRepository implements CareRepository {
         'schema_version',
         String(SCHEMA_VERSION),
       ]);
-    } else if (Number(row.value) < 2) {
-      // Migration v1 -> v2: legacy single-start timers become a single running segment.
-      await this.db.execAsync(`
-        ALTER TABLE active_timers ADD COLUMN segments TEXT NOT NULL DEFAULT '[]';
-        ALTER TABLE active_timers ADD COLUMN lastSide TEXT;
-      `);
-      const legacy = await this.db.getAllAsync<{ id: string; startedAt: string }>(
-        'SELECT id, startedAt FROM active_timers'
-      );
-      for (const t of legacy) {
-        await this.db.runAsync('UPDATE active_timers SET segments = ? WHERE id = ?', [
-          JSON.stringify([{ start: t.startedAt, end: null }]),
-          t.id,
+    } else {
+      const from = Number(row.value);
+      if (from < 2) await this.migrateV1toV2();
+      if (from < 3) await this.migrateV2toV3();
+      if (from < SCHEMA_VERSION) {
+        await this.db.runAsync('UPDATE meta SET value = ? WHERE key = ?', [
+          String(SCHEMA_VERSION),
+          'schema_version',
         ]);
       }
-      await this.db.runAsync('UPDATE meta SET value = ? WHERE key = ?', [
-        String(SCHEMA_VERSION),
-        'schema_version',
+    }
+  }
+
+  private async ensurePhaseCTables(): Promise<void> {
+    // CREATE TABLE IF NOT EXISTS makes this idempotent for fresh installs and migrations.
+    await this.db!.execAsync(`
+      CREATE TABLE IF NOT EXISTS growth_records (
+        id TEXT PRIMARY KEY NOT NULL,
+        babyId TEXT NOT NULL,
+        date TEXT NOT NULL,
+        weightGrams REAL,
+        heightCm REAL,
+        headCircumferenceCm REAL,
+        note TEXT,
+        isDemo INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_growth_baby_date ON growth_records (babyId, date);
+      CREATE TABLE IF NOT EXISTS milestones (
+        id TEXT PRIMARY KEY NOT NULL,
+        babyId TEXT NOT NULL,
+        category TEXT NOT NULL,
+        title TEXT NOT NULL,
+        date TEXT NOT NULL,
+        note TEXT,
+        photoUri TEXT,
+        isDemo INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_milestones_baby_date ON milestones (babyId, date);
+      CREATE TABLE IF NOT EXISTS medications (
+        id TEXT PRIMARY KEY NOT NULL,
+        babyId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        instructions TEXT,
+        doseAmount REAL,
+        doseUnit TEXT,
+        notes TEXT,
+        isDemo INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS medication_administrations (
+        id TEXT PRIMARY KEY NOT NULL,
+        babyId TEXT NOT NULL,
+        medicationId TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        doseAmount REAL,
+        doseUnit TEXT,
+        note TEXT,
+        isDemo INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_admin_baby_ts ON medication_administrations (babyId, timestamp);
+      CREATE TABLE IF NOT EXISTS vaccinations (
+        id TEXT PRIMARY KEY NOT NULL,
+        babyId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        dateGiven TEXT NOT NULL,
+        nextAppointment TEXT,
+        provider TEXT,
+        notes TEXT,
+        isDemo INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_vax_baby_date ON vaccinations (babyId, dateGiven);
+      CREATE TABLE IF NOT EXISTS routines (
+        id TEXT PRIMARY KEY NOT NULL,
+        babyId TEXT NOT NULL,
+        title TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        timeOfDay TEXT NOT NULL,
+        days TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        isDemo INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+  }
+
+  private async migrateV1toV2(): Promise<void> {
+    await this.db!.execAsync(`
+      ALTER TABLE active_timers ADD COLUMN segments TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE active_timers ADD COLUMN lastSide TEXT;
+    `);
+    const legacy = await this.db!.getAllAsync<{ id: string; startedAt: string }>(
+      'SELECT id, startedAt FROM active_timers'
+    );
+    for (const t of legacy) {
+      await this.db!.runAsync('UPDATE active_timers SET segments = ? WHERE id = ?', [
+        JSON.stringify([{ start: t.startedAt, end: null }]),
+        t.id,
       ]);
     }
+  }
+
+  private async migrateV2toV3(): Promise<void> {
+    // v3 widens babies (photoUri, preferredUnits) and adds the Phase C tables.
+    const babyCols = await this.db!.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(babies)"
+    );
+    const names = new Set(babyCols.map((c) => c.name));
+    if (!names.has('photoUri')) {
+      await this.db!.execAsync('ALTER TABLE babies ADD COLUMN photoUri TEXT;');
+    }
+    if (!names.has('preferredUnits')) {
+      await this.db!.execAsync('ALTER TABLE babies ADD COLUMN preferredUnits TEXT;');
+    }
+    await this.ensurePhaseCTables();
   }
 
   async loadAll(): Promise<AppData> {
     if (!this.db) throw new Error('repository not initialised');
     const babies: Baby[] = [];
     const babyRows = await this.db.getAllAsync<{
-      id: string; name: string; birthDate: string; createdAt: string; isDemo: number;
+      id: string; name: string; birthDate: string; createdAt: string;
+      photoUri: string | null; preferredUnits: string | null; isDemo: number;
     }>('SELECT * FROM babies');
     for (const r of babyRows) {
       babies.push({
         id: r.id, name: r.name, birthDate: r.birthDate, createdAt: r.createdAt,
+        photoUri: r.photoUri ?? undefined,
+        preferredUnits: (r.preferredUnits as Baby['preferredUnits'] | null) ?? undefined,
         isDemo: r.isDemo === 1,
       });
     }
@@ -113,14 +214,113 @@ export class SqliteCareRepository implements CareRepository {
         isDemo: r.isDemo === 1,
       });
     }
-    return { babies, events, activeTimers, schemaVersion: 2 as const };
+    const growthRecords = await this.loadGrowth();
+    const milestones = await this.loadMilestones();
+    const medications = await this.loadMedications();
+    const medicationAdministrations = await this.loadAdministrations();
+    const vaccinations = await this.loadVaccinations();
+    const routines = await this.loadRoutines();
+    return {
+      babies, events, activeTimers, growthRecords, milestones, medications,
+      medicationAdministrations, vaccinations, routines, schemaVersion: 3 as const,
+    };
+  }
+
+  private async loadGrowth(): Promise<GrowthRecord[]> {
+    const rows = await this.db!.getAllAsync<{
+      id: string; babyId: string; date: string; weightGrams: number | null;
+      heightCm: number | null; headCircumferenceCm: number | null;
+      note: string | null; isDemo: number;
+    }>('SELECT * FROM growth_records ORDER BY date');
+    return rows.map((r) => ({
+      id: r.id, babyId: r.babyId, date: r.date,
+      weightGrams: r.weightGrams ?? undefined,
+      heightCm: r.heightCm ?? undefined,
+      headCircumferenceCm: r.headCircumferenceCm ?? undefined,
+      note: r.note ?? undefined, isDemo: r.isDemo === 1,
+    }));
+  }
+
+  private async loadMilestones(): Promise<MilestoneRecord[]> {
+    const rows = await this.db!.getAllAsync<{
+      id: string; babyId: string; category: string; title: string; date: string;
+      note: string | null; photoUri: string | null; isDemo: number;
+    }>('SELECT * FROM milestones ORDER BY date');
+    return rows.map((r) => ({
+      id: r.id, babyId: r.babyId, category: r.category as MilestoneRecord['category'],
+      title: r.title, date: r.date, note: r.note ?? undefined,
+      photoUri: r.photoUri ?? undefined, isDemo: r.isDemo === 1,
+    }));
+  }
+
+  private async loadMedications(): Promise<MedicationRecord[]> {
+    const rows = await this.db!.getAllAsync<{
+      id: string; babyId: string; name: string; instructions: string | null;
+      doseAmount: number | null; doseUnit: string | null; notes: string | null; isDemo: number;
+    }>('SELECT * FROM medications');
+    return rows.map((r) => ({
+      id: r.id, babyId: r.babyId, name: r.name, instructions: r.instructions ?? undefined,
+      doseAmount: r.doseAmount ?? undefined,
+      doseUnit: (r.doseUnit as MedicationRecord['doseUnit'] | null) ?? undefined,
+      notes: r.notes ?? undefined, isDemo: r.isDemo === 1,
+    }));
+  }
+
+  private async loadAdministrations(): Promise<MedicationAdministration[]> {
+    const rows = await this.db!.getAllAsync<{
+      id: string; babyId: string; medicationId: string; timestamp: string;
+      doseAmount: number | null; doseUnit: string | null; note: string | null; isDemo: number;
+    }>('SELECT * FROM medication_administrations ORDER BY timestamp');
+    return rows.map((r) => ({
+      id: r.id, babyId: r.babyId, medicationId: r.medicationId, timestamp: r.timestamp,
+      doseAmount: r.doseAmount ?? undefined,
+      doseUnit: (r.doseUnit as MedicationAdministration['doseUnit'] | null) ?? undefined,
+      note: r.note ?? undefined, isDemo: r.isDemo === 1,
+    }));
+  }
+
+  private async loadVaccinations(): Promise<VaccinationRecord[]> {
+    const rows = await this.db!.getAllAsync<{
+      id: string; babyId: string; name: string; dateGiven: string;
+      nextAppointment: string | null; provider: string | null;
+      notes: string | null; isDemo: number;
+    }>('SELECT * FROM vaccinations ORDER BY dateGiven');
+    return rows.map((r) => ({
+      id: r.id, babyId: r.babyId, name: r.name, dateGiven: r.dateGiven,
+      nextAppointment: r.nextAppointment ?? undefined, provider: r.provider ?? undefined,
+      notes: r.notes ?? undefined, isDemo: r.isDemo === 1,
+    }));
+  }
+
+  private async loadRoutines(): Promise<RoutineTemplate[]> {
+    const rows = await this.db!.getAllAsync<{
+      id: string; babyId: string; title: string; kind: string; timeOfDay: string;
+      days: string; active: number; isDemo: number;
+    }>('SELECT * FROM routines');
+    return rows.map((r) => {
+      let days: number[] = [];
+      try {
+        const parsed = JSON.parse(r.days) as number[];
+        if (Array.isArray(parsed)) days = parsed;
+      } catch {
+        // leave empty; routine then never fires rather than crashing
+      }
+      return {
+        id: r.id, babyId: r.babyId, title: r.title,
+        kind: r.kind as RoutineTemplate['kind'], timeOfDay: r.timeOfDay, days,
+        active: r.active === 1, isDemo: r.isDemo === 1,
+      };
+    });
   }
 
   async addBaby(baby: Baby): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
     await this.db.runAsync(
-      'INSERT OR REPLACE INTO babies (id, name, birthDate, createdAt, isDemo) VALUES (?, ?, ?, ?, ?)',
-      [baby.id, baby.name, baby.birthDate, baby.createdAt, baby.isDemo ? 1 : 0]
+      'INSERT OR REPLACE INTO babies (id, name, birthDate, createdAt, photoUri, preferredUnits, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        baby.id, baby.name, baby.birthDate, baby.createdAt,
+        baby.photoUri ?? null, baby.preferredUnits ?? null, baby.isDemo ? 1 : 0,
+      ]
     );
   }
 
@@ -130,9 +330,19 @@ export class SqliteCareRepository implements CareRepository {
 
   async deleteBaby(babyId: string): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
-    await this.db.runAsync('DELETE FROM babies WHERE id = ?', [babyId]);
-    await this.db.runAsync('DELETE FROM events WHERE babyId = ?', [babyId]);
-    await this.db.runAsync('DELETE FROM active_timers WHERE babyId = ?', [babyId]);
+    await this.db.withTransactionAsync(async () => {
+      const tables = [
+        'babies', 'events', 'active_timers', 'growth_records', 'milestones',
+        'medications', 'medication_administrations', 'vaccinations', 'routines',
+      ];
+      for (const table of tables) {
+        if (table === 'babies') {
+          await this.db!.runAsync('DELETE FROM babies WHERE id = ?', [babyId]);
+        } else {
+          await this.db!.runAsync(`DELETE FROM ${table} WHERE babyId = ?`, [babyId]);
+        }
+      }
+    });
   }
 
   async addEvent(event: CareEvent): Promise<void> {
@@ -171,15 +381,127 @@ export class SqliteCareRepository implements CareRepository {
     await this.db.runAsync('DELETE FROM active_timers WHERE id = ?', [timerId]);
   }
 
+  async addGrowthRecord(record: GrowthRecord): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.runAsync(
+      'INSERT OR REPLACE INTO growth_records (id, babyId, date, weightGrams, heightCm, headCircumferenceCm, note, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        record.id, record.babyId, record.date, record.weightGrams ?? null,
+        record.heightCm ?? null, record.headCircumferenceCm ?? null,
+        record.note ?? null, record.isDemo ? 1 : 0,
+      ]
+    );
+  }
+
+  async deleteGrowthRecord(id: string): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.runAsync('DELETE FROM growth_records WHERE id = ?', [id]);
+  }
+
+  async addMilestone(record: MilestoneRecord): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.runAsync(
+      'INSERT OR REPLACE INTO milestones (id, babyId, category, title, date, note, photoUri, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        record.id, record.babyId, record.category, record.title, record.date,
+        record.note ?? null, record.photoUri ?? null, record.isDemo ? 1 : 0,
+      ]
+    );
+  }
+
+  async deleteMilestone(id: string): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.runAsync('DELETE FROM milestones WHERE id = ?', [id]);
+  }
+
+  async addMedication(record: MedicationRecord): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.runAsync(
+      'INSERT OR REPLACE INTO medications (id, babyId, name, instructions, doseAmount, doseUnit, notes, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        record.id, record.babyId, record.name, record.instructions ?? null,
+        record.doseAmount ?? null, record.doseUnit ?? null, record.notes ?? null,
+        record.isDemo ? 1 : 0,
+      ]
+    );
+  }
+
+  async deleteMedication(id: string): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.withTransactionAsync(async () => {
+      await this.db!.runAsync('DELETE FROM medications WHERE id = ?', [id]);
+      await this.db!.runAsync('DELETE FROM medication_administrations WHERE medicationId = ?', [id]);
+    });
+  }
+
+  async addMedicationAdministration(record: MedicationAdministration): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.runAsync(
+      'INSERT OR REPLACE INTO medication_administrations (id, babyId, medicationId, timestamp, doseAmount, doseUnit, note, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        record.id, record.babyId, record.medicationId, record.timestamp,
+        record.doseAmount ?? null, record.doseUnit ?? null, record.note ?? null,
+        record.isDemo ? 1 : 0,
+      ]
+    );
+  }
+
+  async deleteMedicationAdministration(id: string): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.runAsync('DELETE FROM medication_administrations WHERE id = ?', [id]);
+  }
+
+  async addVaccination(record: VaccinationRecord): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.runAsync(
+      'INSERT OR REPLACE INTO vaccinations (id, babyId, name, dateGiven, nextAppointment, provider, notes, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        record.id, record.babyId, record.name, record.dateGiven,
+        record.nextAppointment ?? null, record.provider ?? null, record.notes ?? null,
+        record.isDemo ? 1 : 0,
+      ]
+    );
+  }
+
+  async deleteVaccination(id: string): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.runAsync('DELETE FROM vaccinations WHERE id = ?', [id]);
+  }
+
+  async addRoutine(record: RoutineTemplate): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.runAsync(
+      'INSERT OR REPLACE INTO routines (id, babyId, title, kind, timeOfDay, days, active, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        record.id, record.babyId, record.title, record.kind, record.timeOfDay,
+        JSON.stringify(record.days), record.active ? 1 : 0, record.isDemo ? 1 : 0,
+      ]
+    );
+  }
+
+  async deleteRoutine(id: string): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.runAsync('DELETE FROM routines WHERE id = ?', [id]);
+  }
+
   async replaceAll(data: AppData): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
     await this.db.withTransactionAsync(async () => {
-      await this.db!.runAsync('DELETE FROM babies');
-      await this.db!.runAsync('DELETE FROM events');
-      await this.db!.runAsync('DELETE FROM active_timers');
+      for (const table of [
+        'babies', 'events', 'active_timers', 'growth_records', 'milestones',
+        'medications', 'medication_administrations', 'vaccinations', 'routines',
+      ]) {
+        await this.db!.runAsync(`DELETE FROM ${table}`);
+      }
       for (const b of data.babies) await this.addBaby(b);
       for (const e of data.events) await this.addEvent(e);
       for (const t of data.activeTimers) await this.addTimer(t);
+      for (const g of data.growthRecords) await this.addGrowthRecord(g);
+      for (const m of data.milestones) await this.addMilestone(m);
+      for (const m of data.medications) await this.addMedication(m);
+      for (const a of data.medicationAdministrations) await this.addMedicationAdministration(a);
+      for (const v of data.vaccinations) await this.addVaccination(v);
+      for (const r of data.routines) await this.addRoutine(r);
     });
   }
 
