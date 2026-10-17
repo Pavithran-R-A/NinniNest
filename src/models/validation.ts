@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isCalendarValid } from './calendar';
 import type {
   ActiveTimer, AppData, Baby, CareEvent, GrowthRecord, MedicationAdministration,
   MedicationRecord, MilestoneRecord, RoutineTemplate, VaccinationRecord,
@@ -6,7 +7,10 @@ import type {
 
 export const idSchema = z.string().uuid();
 export const isoSchema = z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'invalid date');
-export const dateKeySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export const dateKeySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isCalendarValid, 'not a real calendar date');
 export const hhmmSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
 export const babySchema = z.object({

@@ -12,57 +12,91 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/src/design/ThemeProvider';
 import { fontNames, radius, spacing } from '@/src/design/tokens';
 import { useApp } from '@/src/state/AppProvider';
-import { PrimaryButton, Card } from '@/src/components/ui';
+import { PrimaryButton, Card, SegmentedControl } from '@/src/components/ui';
+import { buildBackup, dryRunParse, mergeData, type ImportMode } from '@/src/models/backup';
+import { backupFileName, pickBackupFile, shareCsvBundle, shareTextFile } from '@/src/models/share';
+import { eventsToCsv, allCategoricalCsv } from '@/src/models/csv';
+import { localKeyOf } from '@/src/models/calendar';
 
 export default function SettingsScreen() {
   const t = useTheme();
   const {
     themeMode, setThemeMode, isDemo, enterDemo, exitDemo,
-    resetPersonal, exportJson, importData, data,
+    resetPersonal, exportJson, importData, data, repo, refresh,
   } = useApp();
   const [message, setMessage] = useState<string | null>(null);
+  const [importMode, setImportMode] = useState<ImportMode>('merge');
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const personalCount = data.events.filter((e) => !e.isDemo).length;
 
   const doExport = async () => {
     const json = await exportJson();
-    try {
-      if (Platform.OS === 'web') {
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `ninninest-backup-${localToday()}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setMessage('Backup downloaded.');
-      } else {
-        const { Share } = require('react-native');
-        await Share.share({ message: json.slice(0, 2000) });
-        setMessage('Use the share sheet to save or send your backup. For very long histories, export from a device that supports file sharing.');
-      }
-    } catch {
-      setMessage('Export did not complete.');
-    }
+    const result = await shareTextFile(backupFileName(new Date().toISOString()), json, 'application/json');
+    setMessage(result.ok ? 'Backup saved or shared.' : result.message);
   };
 
-  const pickImport = () => {
-    if (Platform.OS === 'web') {
-      fileRef.current?.click();
-    } else {
-      setMessage('On phones, import will arrive with the next release. You can already export.');
-    }
+  const doCsvExport = async () => {
+    const files = [
+      { name: 'care-history', content: eventsToCsv(data.events) },
+      ...allCategoricalCsv(data),
+    ];
+    const result = await shareCsvBundle(files);
+    setMessage(result.ok ? `CSV export ready (${files.length} files).` : result.message);
   };
 
-  const handleWebImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    const result = await importData(text);
-    setMessage(result.message);
-    input.value = '';
+  // Full import flow: dry-run validate, then merge or replace, transactionally.
+  const runImport = async (json: string) => {
+    const parsed = dryRunParse(json);
+    if (!parsed.dryRun.ok) {
+      const errors = parsed.dryRun.issues.filter((i) => i.severity === 'error');
+      Alert.alert(
+        'This backup cannot be imported',
+        errors.map((e) => e.message).join('\n'),
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    const c = parsed.dryRun.counts;
+    const summary = `${c.babies} profiles, ${c.events} events, ${c.growth} growth records, ${c.vaccinations} vaccinations, ${c.routines} routines.`;
+    const warnings = parsed.dryRun.issues.filter((i) => i.severity === 'warning');
+    Alert.alert(
+      'Review this import',
+      `${summary}${warnings.length ? '\n\n' + warnings.map((w) => w.message).join('\n') : ''}\n\nMode: ${importMode === 'merge' ? 'Merge — keep everything, add new records only' : 'Replace — erase current records first'}. Continue?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Import',
+          onPress: async () => {
+            try {
+              // Transactional: build target, validate, then single replaceAll write.
+              const target =
+                importMode === 'replace'
+                  ? { ...parsed.backup.data, schemaVersion: 3 as const }
+                  : mergeData(data, parsed.backup.data);
+              if (target.babies.length === 0) {
+                setMessage('Nothing to import — no valid profiles in the file.');
+                return;
+              }
+              await repo.replaceAll(target);
+              await refresh();
+              setMessage(importMode === 'replace' ? 'Backup restored (replace).' : 'Backup merged into your journal.');
+            } catch {
+              setMessage('Import failed before anything was written. Your existing records are untouched.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const pickImport = async () => {
+    const picked = await pickBackupFile();
+    if (!picked.ok || !picked.json) {
+      if (picked.message) setMessage(picked.message);
+      return;
+    }
+    await runImport(picked.json);
   };
 
   const confirmErase = () => {
@@ -105,7 +139,10 @@ export default function SettingsScreen() {
       type="file"
       accept="application/json"
       style={{ display: 'none' }}
-      onChange={handleWebImport}
+      onChange={(e) => {
+        void pickImport();
+        e.target.value = '';
+      }}
     />
   );
 
@@ -148,9 +185,30 @@ export default function SettingsScreen() {
             </Text>
             <View style={styles.btnCol}>
               <PrimaryButton label="Export backup (JSON)" variant="secondary" onPress={doExport} />
+              <PrimaryButton label="Export care history (CSV)" variant="secondary" onPress={doCsvExport} />
               <PrimaryButton label="Import a backup" variant="secondary" onPress={pickImport} />
-              <PrimaryButton label="Erase all data" onPress={confirmErase} style={{ backgroundColor: t.cinnamon }} />
             </View>
+            <View style={{ marginTop: spacing(3) }}>
+              <Text style={[styles.importModeLabel, { color: t.ink }]}>When importing:</Text>
+              <SegmentedControl
+                label="Import mode"
+                options={[
+                  { value: 'merge' as const, label: 'Merge' },
+                  { value: 'replace' as const, label: 'Replace all' },
+                ]}
+                value={importMode}
+                onChange={setImportMode}
+              />
+              <Text style={[styles.importModeHint, { color: t.inkFaint }]}>
+                Merge adds new records and keeps everything you have. Replace erases current
+                records first. Either way the file is fully checked before anything changes.
+              </Text>
+            </View>
+            <PrimaryButton
+              label="Erase all data"
+              onPress={confirmErase}
+              style={{ backgroundColor: t.cinnamon, marginTop: spacing(3) }}
+            />
           </Card>
         </Section>
 
@@ -174,7 +232,7 @@ export default function SettingsScreen() {
               NinniNest is a local-first care journal. Core tracking, history, export and erase
               are free forever. There is no account, no advertising and no hidden subscription.
             </Text>
-            <Text style={[styles.aboutVersion, { color: t.inkFaint }]}>Version 0.1.0 · vertical slice</Text>
+            <Text style={[styles.aboutVersion, { color: t.inkFaint }]}>Version 0.4.0 · Phase D</Text>
           </Card>
         </Section>
       </ScrollView>
@@ -211,11 +269,6 @@ function Row({
   );
 }
 
-function localToday(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   scroll: {
@@ -246,6 +299,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing(3),
   },
   btnCol: { gap: spacing(2) },
+  importModeLabel: { fontSize: 14, fontWeight: '600', marginBottom: spacing(1.5) },
+  importModeHint: { fontSize: 12, lineHeight: 18, marginTop: spacing(1.5) },
   message: {
     fontSize: 14,
     lineHeight: 21,

@@ -17,6 +17,13 @@ caregivers. India-first, internationally usable.
 8. Demo mode: clearly synthetic, isolated, never mixes with personal data.
 9. Future modules planned: growth, milestones, medication log (observational only),
    vaccination history (user-entered), insights with missing-data states.
+10. Phase D: insights analytics (feeds/sleep/diapers/tummy/growth/meds/milestones),
+    CSV export (RFC 4180), versioned JSON backup (v4) with dry-run validation and
+    merge/replace import, native document picker, share sheet, routine reminders
+    (never auto-record), photo durability in managed per-baby storage, strict
+    calendar validation (real dates only).
+11. Analytics are deterministic and unit-tested; missing data stays empty — never
+    interpolated or interpreted as medical advice.
 
 ## Non-functional requirements
 - Strict TypeScript; pure logic unit-tested (models, time arithmetic, validation).
