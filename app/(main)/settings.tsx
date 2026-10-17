@@ -13,7 +13,8 @@ import { useTheme } from '@/src/design/ThemeProvider';
 import { fontNames, radius, spacing } from '@/src/design/tokens';
 import { useApp } from '@/src/state/AppProvider';
 import { PrimaryButton, Card, SegmentedControl } from '@/src/components/ui';
-import { buildBackup, dryRunParse, mergeData, type ImportMode } from '@/src/models/backup';
+import { buildBackup, dryRunParse, mergeData, type ImportMode, type BackupFile } from '@/src/models/backup';
+import { buildFullBackup, restoreEmbeddedPhotos } from '@/src/models/mediaBackup';
 import { backupFileName, pickBackupFile, shareCsvBundle, shareTextFile } from '@/src/models/share';
 import { eventsToCsv, allCategoricalCsv } from '@/src/models/csv';
 import { localKeyOf } from '@/src/models/calendar';
@@ -31,9 +32,13 @@ export default function SettingsScreen() {
   const personalCount = data.events.filter((e) => !e.isDemo).length;
 
   const doExport = async () => {
-    const json = await exportJson();
+    // Full backup: records + settings + embedded photo bytes. A records-only
+    // JSON file is not a complete backup.
+    const backup = await buildFullBackup(data, { themeMode });
+    const json = JSON.stringify(backup);
     const result = await shareTextFile(backupFileName(new Date().toISOString()), json, 'application/json');
-    setMessage(result.ok ? 'Backup saved or shared.' : result.message);
+    const photoCount = backup.photosEmbedded.length;
+    setMessage(result.ok ? `Backup saved with ${photoCount} photo${photoCount === 1 ? '' : 's'} included.` : result.message);
   };
 
   const doCsvExport = async () => {
@@ -79,8 +84,12 @@ export default function SettingsScreen() {
                 return;
               }
               await repo.replaceAll(target);
+              const restored = await restoreEmbeddedPhotos(parsed.backup.photos ?? []);
               await refresh();
-              setMessage(importMode === 'replace' ? 'Backup restored (replace).' : 'Backup merged into your journal.');
+              setMessage(
+                `${importMode === 'replace' ? 'Backup restored (replace)' : 'Backup merged into your journal'}.` +
+                (restored.size > 0 ? ` ${restored.size} photo(s) restored.` : '')
+              );
             } catch {
               setMessage('Import failed before anything was written. Your existing records are untouched.');
             }

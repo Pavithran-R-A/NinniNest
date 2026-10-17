@@ -12,12 +12,20 @@ export interface PhotoManifestEntry {
   fileName: string;
 }
 
+export interface EmbeddedPhotoData {
+  recordId: string;
+  field: 'babyPhoto' | 'milestonePhoto';
+  fileName: string;
+  base64?: string;
+  sha256?: string;
+}
+
 export interface BackupFile {
   app: 'NinniNest';
   backupVersion: number;
   exportedAt: string;
   data: AppData;
-  photos: PhotoManifestEntry[]; // URIs are NOT embedded; payload ships separately on web/native share
+  photos: EmbeddedPhotoData[]; // manifest; base64 bytes present when media-inclusive
   settings?: { themeMode?: string };
 }
 

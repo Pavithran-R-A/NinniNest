@@ -1,6 +1,6 @@
 # FEATURE_STATUS.md
 
-Last updated: 2026-10-17 (Phase D — data safety, analytics, portability)
+Last updated: 2026-10-17 (Phase E — build readiness, restore integrity, handoff)
 
 ## Working (implemented and persisted)
 
@@ -40,13 +40,22 @@ Last updated: 2026-10-17 (Phase D — data safety, analytics, portability)
 | --- | --- |
 | Growth percentile curves | OMITTED (no validated licensed WHO dataset) |
 | Notifications on web | NOT POSSIBLE (platform limitation, surfaced in UI flow) |
-| Photo restore into media library after import | PARTIAL — manifest is written and versioned; re-linking files post-restore lands with handoff work |
+| Photo restore into media library after import | DONE — Phase E: full backups embed photos as base64 with hash verification; restore writes files back into the managed media directory |
 | Cloud sync, payments | OUT OF SCOPE per instructions |
+
+## Phase E additions
+| Feature | Status |
+| --- | --- |
+| **Android build readiness** | DONE (config) — package `app.ninninest.journal`, APK `preview` / AAB `production` EAS profiles, prebuild verified (exit 0, permissions + applicationId confirmed). **No APK produced**: EAS not authenticated in sandbox — owner commands in `docs/ANDROID_BUILD.md` |
+| **Media-inclusive backup** | DONE — v4 backup embeds photos (base64 + FNV-1a hash); restore re-writes files and verifies hashes; 11 integrity tests green |
+| **Handoff documentation** | DONE — `docs/ANDROID_BUILD.md`, `DEVICE_TEST_MATRIX.md`, `BACKUP_RESTORE_AUDIT.md`, `EXPORT_HANDOFF.md`, `KNOWN_LIMITATIONS.md` |
+| **Visual QA** | PARTIAL — code-review pass only (no rendered browser); touch-target fix applied to Today quick links |
 
 ## Verification evidence (this phase)
 - `npx tsc --noEmit` (strict): exit 0
-- `npm test`: exit 0 — **110/110 tests, 9 files** (30 new Phase D tests)
+- `npm test`: exit 0 — **121/121 tests, 10 files** (11 new backup-integrity tests)
 - `npx expo-doctor`: exit 0 — 21/21
-- `npx expo export --platform web`: exit 0; Insights + backup code present in bundle
-- Rendered browser / device runs: still impossible in this environment (no browser or
-  device tooling); documented rather than claimed.
+- `npx expo export --platform web`: exit 0
+- `npx expo prebuild --platform android --no-install --clean`: exit 0 (config verified; generated folder removed again to keep managed workflow)
+- `npx eas-cli whoami`: **"Not logged in"** — no build possible; honestly recorded
+- Rendered browser / device runs: impossible in this environment (no browser or device tooling); documented rather than claimed

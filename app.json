@@ -1,14 +1,32 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
-    "slug": "bolt-expo-nativewind",
+    "name": "NinniNest",
+    "slug": "ninninest",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "ninninest",
     "userInterfaceStyle": "automatic",
+    "platforms": ["ios", "android", "web"],
+    "android": {
+      "package": "app.ninninest.journal",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#F7F5F0"
+      },
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ]
+    },
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "app.ninninest.journal",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "NinniNest lets you attach photos of your child to milestones and profiles.",
+        "NSPhotoLibraryAddUsageDescription": "NinniNest can save milestone photos to your photo library."
+      }
     },
     "web": {
       "bundler": "metro",
@@ -19,9 +37,23 @@
       "expo-router",
       "expo-font",
       "expo-web-browser",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F7F5F0"
+        }
+      ],
       "expo-status-bar",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "mode": "expo-push-notifications"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

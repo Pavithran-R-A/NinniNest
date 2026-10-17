@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## 0.5.0 — 2026-10-17 (Phase E — build readiness, restore integrity, handoff)
+
+### Added
+- Media-inclusive backups: full backup now embeds every managed photo as base64 with
+  an FNV-1a content hash; restore writes files back into the per-baby media directory
+  and verifies each hash, failing loudly on corruption. Records-only JSON is no longer
+  presented as a complete backup.
+- Android build configuration finalized: `eas.json` preview (APK, internal) and
+  production (app-bundle, auto-increment) profiles; Android package
+  `app.ninninest.journal`; prebuild verified (permissions and applicationId confirmed).
+- Handoff documentation: `docs/ANDROID_BUILD.md`, `docs/DEVICE_TEST_MATRIX.md`,
+  `docs/BACKUP_RESTORE_AUDIT.md`, `docs/EXPORT_HANDOFF.md`, `docs/KNOWN_LIMITATIONS.md`.
+
+### Fixed
+- "Log past sleep / past tummy time" quick links on Today now meet the 44dp+ touch
+  target (expanded tap area, no layout shift).
+
+### Verification
+- 121/121 tests (10 files) · typecheck exit 0 · expo-doctor 21/21 · web export exit 0 ·
+  Android prebuild exit 0. **No APK produced** — EAS authentication unavailable in the
+  sandbox; owner commands documented, no success claimed.
+
 ## 0.4.0 — 2026-10-17 (Phase D — data safety, reporting, portability)
 
 ### Added

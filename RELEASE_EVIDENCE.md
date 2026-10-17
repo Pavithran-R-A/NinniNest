@@ -1,6 +1,31 @@
 # RELEASE_EVIDENCE.md
 
-Recorded: 2026-10-17 · PROMPT A + Phase B + Phase C + Phase D (data safety, analytics, portability)
+Recorded: 2026-10-17 · PROMPT A + Phases B/C/D + Phase E (build readiness, restore integrity, handoff)
+
+## Phase E status report (required disclosures)
+
+- **Git SHA**: none — this environment has no git repository (no commits, no remote).
+- **GitHub remote**: none. Reproducibility via lockfile: `npm ci --dry-run` exit 0.
+- **APK**: **does not exist.** EAS CLI could not authenticate (`eas-cli whoami` →
+  "Not logged in"). Build config is verified and ready; owner commands in
+  `docs/ANDROID_BUILD.md`. No build success is claimed anywhere.
+- **Tests**: 121/121 passing, 10 files (exit 0).
+- **Unresolved blockers**: EAS authentication (owner), device test matrix (owner),
+  one visual pass on real hardware (owner).
+
+## Phase E verification evidence
+
+| Check | Command | Exit code | Result |
+| --- | --- | --- | --- |
+| Strict TypeScript | `npx tsc --noEmit` | 0 | clean |
+| Tests | `npm test` (vitest) | 0 | **121/121 passed, 10 files** (11 new backup-integrity) |
+| Expo Doctor | `npx expo-doctor` | 0 | 21/21 checks |
+| Web export | `npx expo export --platform web` | 0 | dist produced |
+| Android prebuild | `npx expo prebuild --platform android --no-install --clean` | 0 | POST_NOTIFICATIONS + RECEIVE_BOOT_COMPLETED in manifest; `applicationId 'app.ninninest.journal'` in gradle |
+| Lockfile | `npm ci --dry-run` | 0 | lockfile complete |
+| EAS auth | `npx eas-cli whoami` | non-zero | **"Not logged in" — build impossible here** |
+| APK artifact | — | — | **DOES NOT EXIST — not claimed** |
+| Rendered browser / device | — | — | **NOT RUN** — no tooling in this environment |
 
 ## Phase D verification evidence
 

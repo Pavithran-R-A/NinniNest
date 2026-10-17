@@ -24,3 +24,6 @@ Read `docs/01_PROJECT_KNOWLEDGE.md` first. Key operational rules:
    enough. Analytics live in `src/models/analytics.ts` and must stay deterministic.
 13. Routine reminders (`src/models/notifications.ts`) are informational only and must
    never create medication administrations or journal entries.
+14. Android build commands live in `docs/ANDROID_BUILD.md`; never claim an APK or
+    device result that was not actually produced — record it in
+    `docs/DEVICE_TEST_MATRIX.md` with VERIFIED/FAILED/NOT TESTED instead.

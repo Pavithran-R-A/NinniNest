@@ -332,7 +332,7 @@ export default function TodayScreen() {
           </View>
           <View style={styles.manualRow}>
             <Text
-              style={[styles.manualLink, { color: t.cinnamon }]}
+              style={[styles.manualLink, styles.manualLinkHit, { color: t.cinnamon }]}
               onPress={() => setSheet('manual_sleep')}
               accessibilityRole="button"
               accessibilityLabel="Log a past sleep manually"
@@ -341,7 +341,7 @@ export default function TodayScreen() {
             </Text>
             <Text style={[styles.manualSep, { color: t.inkFaint }]}>·</Text>
             <Text
-              style={[styles.manualLink, { color: t.cinnamon }]}
+              style={[styles.manualLink, styles.manualLinkHit, { color: t.cinnamon }]}
               onPress={() => setSheet('manual_tummy')}
               accessibilityRole="button"
               accessibilityLabel="Log past tummy time manually"
@@ -610,6 +610,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     minHeight: 32,
   },
+  manualLinkHit: { marginTop: -8, marginBottom: -8, paddingTop: 8, paddingBottom: 8 },
+
   manualSep: {
     fontSize: 14,
   },
