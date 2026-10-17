@@ -14,6 +14,7 @@ import {
 import { formatDuration } from '@/src/models/time';
 import { formatWeight, formatLength, ageInDays } from '@/src/models/growth';
 import type { CareEvent } from '@/src/models/types';
+import { useI18n } from '@/src/i18n/useI18n';
 
 type Range = '7d' | '30d' | 'day';
 
@@ -88,6 +89,7 @@ function DayBars({
 export default function InsightsScreen() {
   const t = useTheme();
   const { data, currentBaby, isDemo } = useApp();
+  const { t: tr } = useI18n();
   const [range, setRange] = useState<Range>('7d');
   const [babyId, setBabyId] = useState<string | null>(null);
 
@@ -133,7 +135,7 @@ export default function InsightsScreen() {
     return (
       <SafeAreaView style={[styles.flex, { backgroundColor: t.canvas }]} edges={['top']}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>Insights</Text>
+          <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>{tr('insights.title')}</Text>
         </View>
         <EmptyState
           title="Nothing to show yet"
@@ -158,16 +160,16 @@ export default function InsightsScreen() {
           <Text style={[styles.kicker, { color: t.cinnamon }]}>
             {selectedBaby ? `${selectedBaby.name} · ${ageInDays(selectedBaby.birthDate, new Date().toISOString().slice(0, 10))} days old` : ''}
           </Text>
-          <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>Insights</Text>
+          <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>{tr('insights.title')}</Text>
         </View>
 
         <View style={{ marginTop: spacing(3), gap: spacing(2) }}>
           <SegmentedControl
             label="Date range"
             options={[
-              { value: 'day' as const, label: 'Today' },
-              { value: '7d' as const, label: '7 days' },
-              { value: '30d' as const, label: '30 days' },
+              { value: 'day' as const, label: tr('insights.range.today') },
+              { value: '7d' as const, label: tr('insights.range.7d') },
+              { value: '30d' as const, label: tr('insights.range.30d') },
             ]}
             value={range}
             onChange={setRange}
@@ -201,7 +203,7 @@ export default function InsightsScreen() {
           />
         ) : (
           <>
-            <SectionHeading kicker={windowLabel} title="Feeding" />
+            <SectionHeading kicker={windowLabel} title={tr('insights.feeds')} />
             <View style={[styles.panel, { backgroundColor: t.surface, borderColor: t.hairline }]}>
               <View style={styles.metricRow}>
                 <Metric value={String(feeds.breastSessionCount)} label="nursing sessions" />
@@ -227,7 +229,7 @@ export default function InsightsScreen() {
 
             {pump.sessionCount > 0 ? (
               <>
-                <SectionHeading kicker={windowLabel} title="Pumping" />
+                <SectionHeading kicker={windowLabel} title={tr('insights.pumping')} />
                 <View style={[styles.panel, { backgroundColor: t.surface, borderColor: t.hairline }]}>
                   <View style={styles.metricRow}>
                     <Metric value={String(pump.sessionCount)} label="sessions" />
@@ -238,7 +240,7 @@ export default function InsightsScreen() {
               </>
             ) : null}
 
-            <SectionHeading kicker={windowLabel} title="Sleep" />
+            <SectionHeading kicker={windowLabel} title={tr('insights.sleep')} />
             <View style={[styles.panel, { backgroundColor: t.surface, borderColor: t.hairline }]}>
               <View style={styles.metricRow}>
                 <Metric value={formatDuration(sleep.totalMin)} label="total" emphasis />
@@ -253,7 +255,7 @@ export default function InsightsScreen() {
               </View>
             </View>
 
-            <SectionHeading kicker={windowLabel} title="Care rhythm" />
+            <SectionHeading kicker={windowLabel} title={tr('insights.diapers')} />
             <View style={[styles.panel, { backgroundColor: t.surface, borderColor: t.hairline }]}>
               <View style={styles.metricRow}>
                 <Metric value={String(diapers.total)} label="diapers" />
@@ -270,7 +272,7 @@ export default function InsightsScreen() {
               </View>
             </View>
 
-            <SectionHeading kicker={windowLabel} title="Day by day" />
+            <SectionHeading kicker={windowLabel} title={tr('insights.tummyTime')} />
             <View style={[styles.panel, { backgroundColor: t.surface, borderColor: t.hairline }]}>
               {activity
                 .slice()
@@ -294,7 +296,7 @@ export default function InsightsScreen() {
 
         {growth.length > 0 ? (
           <>
-            <SectionHeading kicker="All time" title="Growth history" />
+            <SectionHeading kicker="All time" title={tr('insights.growth')} />
             <View style={[styles.panel, { backgroundColor: t.surface, borderColor: t.hairline }]}>
               {growth
                 .slice()
@@ -318,7 +320,7 @@ export default function InsightsScreen() {
 
         {milestones.length > 0 ? (
           <>
-            <SectionHeading kicker="All time" title="Milestones" />
+            <SectionHeading kicker="All time" title={tr('insights.milestones')} />
             <View style={[styles.panel, { backgroundColor: t.surface, borderColor: t.hairline }]}>
               {milestones
                 .slice()

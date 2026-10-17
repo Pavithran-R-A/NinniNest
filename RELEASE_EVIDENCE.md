@@ -1,6 +1,24 @@
 # RELEASE_EVIDENCE.md
 
-Recorded: 2026-10-17 · PROMPT A + Phases B/C/D + Phase E (build readiness, restore integrity, handoff)
+Recorded: 2026-10-17 · PROMPT A + Phases B/C/D/E + Phase F (consumer experience, i18n, identity)
+
+## Phase F verification evidence
+
+| Check | Command | Exit code | Result |
+| --- | --- | --- | --- |
+| Strict TypeScript | `npx tsc --noEmit` | 0 | clean |
+| Tests | `npm test` (vitest) | 0 | **129/129 passed, 11 files** (8 new i18n) |
+| Expo Doctor | `npx expo-doctor` | 0 | 21/21 checks |
+| Android prebuild | `npx expo prebuild --platform android --no-install --clean` | 0 | adaptive icon webp generated at all densities |
+| Web export | `npx expo export --platform web` | 0 (Phase F re-run) | dist produced |
+| Rendered visual QA | — | — | **NOT RUN — no browser/screenshot tool in this environment.** `docs/VISUAL_QA_CHECKLIST.md` is the handoff instrument |
+
+### Phase F honest statement
+
+The UI was **not actually rendered** in this environment. All Phase F changes
+(i18n, themes, brand assets, guards) are verified by strict typecheck and 129 unit
+tests including 8 i18n coverage tests. Visual composition, font scaling, safe areas,
+and touch ergonomics remain human-verification tasks listed in the checklist.
 
 ## Phase E status report (required disclosures)
 

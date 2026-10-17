@@ -5,11 +5,19 @@ import { Copy, Share2 } from 'lucide-react-native';
 import { useTheme } from '@/src/design/ThemeProvider';
 import { fontNames, radius, spacing } from '@/src/design/tokens';
 import { useApp } from '@/src/state/AppProvider';
-import { formatClock, formatDuration, formatMl, localDateKey } from '@/src/models/time';
+import { formatDuration, formatMl } from '@/src/models/time';
 import type { CareEvent } from '@/src/models/types';
 import { PrimaryButton, SegmentedControl, EmptyState } from '@/src/components/ui';
+import { useI18n } from '@/src/i18n/useI18n';
+import { BRAND } from '@/src/i18n/brand';
+import type { TFunc } from '@/src/i18n/strings';
 
-function summarize(events: CareEvent[], hours: number): string {
+function summarize(
+  events: CareEvent[],
+  hours: number,
+  tr: TFunc,
+  clock: (iso: string) => string
+): string {
   const cutoff = Date.now() - hours * 3600000;
   const win = events.filter((e) => Date.parse(e.timestamp) >= cutoff);
 
@@ -25,11 +33,11 @@ function summarize(events: CareEvent[], hours: number): string {
       lines.push(
         `Last feed: ${formatMl(lastFeed.amountMl)} ${
           lastFeed.milkType === 'breast_milk' ? 'breast milk' : lastFeed.milkType === 'formula' ? 'formula' : 'mixed'
-        } at ${formatClock(lastFeed.timestamp)}`
+        } at ${clock(lastFeed.timestamp)}`
       );
     } else {
       lines.push(
-        `Last feed: breastfed ${formatDuration(lastFeed.durationMin)} (${lastFeed.side}) at ${formatClock(lastFeed.timestamp)}`
+        `Last feed: breastfed ${formatDuration(lastFeed.durationMin)} (${lastFeed.side}) at ${clock(lastFeed.timestamp)}`
       );
     }
     lines.push(`Feeds in window: ${feeds.length}`);
@@ -41,7 +49,7 @@ function summarize(events: CareEvent[], hours: number): string {
   const lastDiaper = diapers[0];
   if (lastDiaper && lastDiaper.type === 'diaper') {
     lines.push(
-      `Last diaper: ${lastDiaper.diaperType} at ${formatClock(lastDiaper.timestamp)} (${diapers.length} in window)`
+      `Last diaper: ${lastDiaper.diaperType} at ${clock(lastDiaper.timestamp)} (${diapers.length} in window)`
     );
   } else {
     lines.push('Last diaper: not recorded in this window');
@@ -57,7 +65,7 @@ function summarize(events: CareEvent[], hours: number): string {
 
   const notes = win.filter((e) => e.type === 'note');
   for (const n of notes.slice(0, 3)) {
-    lines.push(`Note (${formatClock(n.timestamp)}): ${n.type === 'note' ? n.note : ''}`);
+    lines.push(`Note (${clock(n.timestamp)}): ${n.type === 'note' ? n.note : ''}`);
   }
 
   return lines.join('\n');
@@ -66,6 +74,7 @@ function summarize(events: CareEvent[], hours: number): string {
 export default function HandoffScreen() {
   const t = useTheme();
   const { currentBaby, data, isDemo } = useApp();
+  const { t: tr, clock } = useI18n();
   const [hours, setHours] = useState<'12' | '24'>('12');
   const [copied, setCopied] = useState(false);
 
@@ -77,9 +86,13 @@ export default function HandoffScreen() {
   }, [data.events, currentBaby]);
 
   const letter = useMemo(() => {
-    const header = `Care handoff — ${currentBaby?.name ?? ''} (${hours}h window, generated ${new Date().toLocaleString()})`;
-    return `${header}\n\n${summarize(events, Number(hours))}\n\nRecorded with NinniNest.`;
-  }, [events, hours, currentBaby]);
+    const header = tr('handoff.generated', {
+      name: currentBaby?.name ?? '',
+      hours,
+      when: new Date().toLocaleString(),
+    });
+    return `${header}\n\n${summarize(events, Number(hours), tr, clock)}\n\n${BRAND.shareSignature}`;
+  }, [events, hours, currentBaby, tr, clock]);
 
   const copy = async () => {
     try {
@@ -112,7 +125,7 @@ export default function HandoffScreen() {
   if (!currentBaby) {
     return (
       <SafeAreaView style={[styles.flex, { backgroundColor: t.canvas }]}>
-        <EmptyState title="No baby profile" body="Create a profile first to build a handoff." />
+        <EmptyState title={tr('handoff.noBaby.title')} body={tr('handoff.noBaby.body')} />
       </SafeAreaView>
     );
   }
@@ -123,18 +136,16 @@ export default function HandoffScreen() {
     <SafeAreaView style={[styles.flex, { backgroundColor: t.canvas }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>
-          Care handoff
+          {tr('handoff.title')}
         </Text>
-        <Text style={[styles.subtitle, { color: t.inkMuted }]}>
-          A precise letter for the next caregiver — built only from what was actually recorded.
-        </Text>
+        <Text style={[styles.subtitle, { color: t.inkMuted }]}>{tr('handoff.subtitle')}</Text>
 
         <View style={{ marginTop: spacing(3) }}>
           <SegmentedControl
             label="Handoff window"
             options={[
-              { value: '12' as const, label: 'Last 12 hours' },
-              { value: '24' as const, label: 'Last 24 hours' },
+              { value: '12' as const, label: tr('handoff.window12') },
+              { value: '24' as const, label: tr('handoff.window24') },
             ]}
             value={hours}
             onChange={setHours}
@@ -147,13 +158,11 @@ export default function HandoffScreen() {
             {isDemo ? ' · DEMO DATA' : ''}
           </Text>
           {windowEvents.length === 0 ? (
-            <Text style={[styles.letterBody, { color: t.inkMuted }]}>
-              Nothing recorded in this window. Entries appear here the moment they are logged.
-            </Text>
+            <Text style={[styles.letterBody, { color: t.inkMuted }]}>{tr('handoff.empty')}</Text>
           ) : (
             windowEvents.slice(0, 30).map((e) => (
               <View key={e.id} style={styles.letterRow}>
-                <Text style={[styles.letterTime, { color: t.inkMuted }]}>{formatClock(e.timestamp)}</Text>
+                <Text style={[styles.letterTime, { color: t.inkMuted }]}>{clock(e.timestamp)}</Text>
                 <Text style={[styles.letterBody, { color: t.ink }]}>{oneLine(e)}</Text>
               </View>
             ))
@@ -162,16 +171,14 @@ export default function HandoffScreen() {
 
         <View style={styles.actions}>
           <PrimaryButton
-            label={copied ? 'Copied' : 'Copy letter'}
+            label={copied ? tr('handoff.copied') : tr('handoff.copy')}
             variant="secondary"
             onPress={copy}
             style={{ flex: 1 }}
           />
-          <PrimaryButton label="Share…" onPress={share} style={{ flex: 1 }} />
+          <PrimaryButton label={tr('handoff.share')} onPress={share} style={{ flex: 1 }} />
         </View>
-        <Text style={[styles.privacy, { color: t.inkFaint }]}>
-          This letter contains private care information. Share only with trusted caregivers.
-        </Text>
+        <Text style={[styles.privacy, { color: t.inkFaint }]}>{tr('handoff.privacy')}</Text>
       </ScrollView>
     </SafeAreaView>
   );

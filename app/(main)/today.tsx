@@ -38,6 +38,7 @@ import { PrimaryButton, SegmentedControl, EmptyState } from '@/src/components/ui
 import {
   DiaperForm, BottleForm, NoteForm, PumpForm, SolidsForm, ManualDurationForm,
 } from '@/src/screens/QuickLog';
+import { useI18n } from '@/src/i18n/useI18n';
 
 type SheetKind =
   | 'diaper' | 'bottle' | 'note' | 'pump' | 'solids'
@@ -61,6 +62,7 @@ export default function TodayScreen() {
     currentBaby, data, isDemo, addEvent, addTimer, stopTimer,
     pauseActiveTimer, resumeActiveTimer, switchActiveTimerSide,
   } = useApp();
+  const { t: tr } = useI18n();
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [repeatTarget, setRepeatTarget] = useState<CareEvent | null>(null);
   const [finishPumpId, setFinishPumpId] = useState<string | null>(null);
@@ -92,10 +94,10 @@ export default function TodayScreen() {
 
   const greeting = () => {
     const h = new Date().getHours();
-    if (h < 5) return 'Still awake';
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
+    if (h < 5) return tr('today.greeting.dawn');
+    if (h < 12) return tr('today.greeting.morning');
+    if (h < 17) return tr('today.greeting.afternoon');
+    return tr('today.greeting.evening');
   };
 
   const nowIso = () => new Date().toISOString();
@@ -112,23 +114,23 @@ export default function TodayScreen() {
       segments: [{ start: now, end: null }],
       ...(isDemo ? { isDemo: true } : {}),
     });
-    if (ok) showToast(`${eventLabel(kind)} timer started${side ? ` (${side})` : ''}`);
-    else showToast('Could not start the timer');
+    if (ok) showToast(tr('today.timerStartedSide', { kind: eventLabel(kind), side: side ?? '' }).replace(' ()', ''));
+    else showToast(tr('today.couldNotStart'));
   };
 
   const handlePause = async (timerId: string) => {
     const ok = await pauseActiveTimer(timerId);
-    showToast(ok ? 'Paused' : 'Could not pause the timer');
+    showToast(ok ? tr('today.pausedToast') : tr('common.error'));
   };
 
   const handleResume = async (timerId: string) => {
     const ok = await resumeActiveTimer(timerId);
-    showToast(ok ? 'Running again' : 'Could not resume the timer');
+    showToast(ok ? tr('today.resumedToast') : tr('common.error'));
   };
 
   const handleSwitchSide = async (timerId: string, side: 'left' | 'right') => {
     const ok = await switchActiveTimerSide(timerId, side);
-    showToast(ok ? `Switched to ${side}` : 'Could not switch sides');
+    showToast(ok ? tr('today.switchedTo', { side }) : tr('today.couldNotSwitch'));
   };
 
   const handleFinish = async (timerId: string, kind: string) => {
@@ -141,7 +143,7 @@ export default function TodayScreen() {
       return;
     }
     const ok = await stopTimer(timerId);
-    showToast(ok ? 'Saved to the journal' : 'Could not save — please try again');
+    showToast(ok ? tr('common.saved') : tr('common.error'));
   };
 
   const finishPumpSave = async (amountMl: number, note?: string) => {
@@ -156,7 +158,7 @@ export default function TodayScreen() {
     });
     setFinishPumpId(null);
     setSheet(null);
-    showToast(ok ? 'Pumping session saved' : 'Could not save — please try again');
+    showToast(ok ? tr('today.pumpSaved') : tr('common.error'));
   };
 
   const persistNewEvent = async (payload: NewEventPayload) => {
@@ -169,7 +171,7 @@ export default function TodayScreen() {
       ...(isDemo ? { isDemo: true } : {}),
     } as CareEvent);
     setSheet(null);
-    showToast(ok ? 'Saved to the journal' : 'Could not save');
+    showToast(ok ? tr('common.saved') : tr('today.couldNotSave'));
   };
 
   const openRepeatSheet = () => {
@@ -190,10 +192,7 @@ export default function TodayScreen() {
   if (!currentBaby) {
     return (
       <SafeAreaView style={[styles.flex, { backgroundColor: t.canvas }]}>
-        <EmptyState
-          title="No baby profile yet"
-          body="Create a profile to start recording care events."
-        />
+        <EmptyState title={tr('today.noBaby.title')} body={tr('today.noBaby.body')} />
       </SafeAreaView>
     );
   }
@@ -230,28 +229,28 @@ export default function TodayScreen() {
             </Text>
             <Text style={[styles.age, { color: t.cinnamon }]}>
               {babyAge(currentBaby.birthDate)}
-              {isDemo ? ' · demo data' : ''}
+              {isDemo ? ` · ${tr('today.demoTag')}` : ''}
             </Text>
           </View>
         </View>
 
         <View style={[styles.statusBand, { backgroundColor: t.surface, borderColor: t.hairline }]}>
           <StatusCell
-            label="Last feed"
+            label={tr('today.lastFeed')}
             value={lastFeed ? timeAgo(lastFeed.timestamp) : '—'}
-            detail={lastFeed ? formatClock(lastFeed.timestamp) : 'nothing recorded'}
+            detail={lastFeed ? formatClock(lastFeed.timestamp) : tr('today.nothingRecorded')}
           />
           <View style={[styles.divider, { backgroundColor: t.hairline }]} />
           <StatusCell
-            label="Last diaper"
+            label={tr('today.lastDiaper')}
             value={lastDiaper ? timeAgo(lastDiaper.timestamp) : '—'}
-            detail={lastDiaper ? formatClock(lastDiaper.timestamp) : 'nothing recorded'}
+            detail={lastDiaper ? formatClock(lastDiaper.timestamp) : tr('today.nothingRecorded')}
           />
           <View style={[styles.divider, { backgroundColor: t.hairline }]} />
           <StatusCell
-            label="Last sleep"
+            label={tr('today.lastSleep')}
             value={lastSleep && lastSleep.type === 'sleep' ? `${Math.round(lastSleep.durationMin)}m` : '—'}
-            detail={lastSleep ? formatClock(lastSleep.timestamp) : 'nothing recorded'}
+            detail={lastSleep ? formatClock(lastSleep.timestamp) : tr('today.nothingRecorded')}
           />
         </View>
 
@@ -275,38 +274,38 @@ export default function TodayScreen() {
         )}
 
         <View style={styles.dockWrap}>
-          <Text style={[styles.dockLabel, { color: t.inkMuted }]}>QUICK LOG</Text>
+          <Text style={[styles.dockLabel, { color: t.inkMuted }]}>{tr('today.quickLog')}</Text>
           <View style={styles.dock}>
             <DockButton
               icon={<Shirt size={24} color={t.accent} strokeWidth={2} />}
-              label="Diaper"
+              label={tr('today.diaper')}
               onPress={() => setSheet('diaper')}
             />
             <DockButton
               icon={<Milk size={24} color={t.accent} strokeWidth={2} />}
-              label="Bottle"
+              label={tr('today.bottle')}
               onPress={() => setSheet('bottle')}
             />
             <DockButton
               icon={<Hand size={24} color={t.accent} strokeWidth={2} />}
-              label="Left"
+              label={tr('today.left')}
               onPress={() => startTimer('feed_breast', 'left')}
             />
             <DockButton
               icon={<Hand size={24} color={t.accent} strokeWidth={2} />}
-              label="Right"
+              label={tr('today.right')}
               onPress={() => startTimer('feed_breast', 'right')}
             />
             <DockButton
               icon={<Moon size={24} color={t.accent} strokeWidth={2} />}
-              label="Sleep"
+              label={tr('today.sleep')}
               onPress={() => startTimer('sleep')}
             />
           </View>
           <View style={styles.dock}>
             <DockButton
               icon={<Hourglass size={24} color={t.accent} strokeWidth={2} />}
-              label="Pump"
+              label={tr('today.pump')}
               onPress={() => startTimer('pump')}
             />
             <DockButton
@@ -316,7 +315,7 @@ export default function TodayScreen() {
             />
             <DockButton
               icon={<Apple size={24} color={t.accent} strokeWidth={2} />}
-              label="Solids"
+              label={tr('today.solids')}
               onPress={() => setSheet('solids')}
             />
             <DockButton
@@ -326,7 +325,7 @@ export default function TodayScreen() {
             />
             <DockButton
               icon={<Repeat size={24} color={t.accent} strokeWidth={2} />}
-              label="Repeat"
+              label={tr('today.repeatLast')}
               onPress={openRepeatSheet}
             />
           </View>
@@ -337,7 +336,7 @@ export default function TodayScreen() {
               accessibilityRole="button"
               accessibilityLabel="Log a past sleep manually"
             >
-              Log past sleep
+              {tr('today.logPastSleep')}
             </Text>
             <Text style={[styles.manualSep, { color: t.inkFaint }]}>·</Text>
             <Text
@@ -346,7 +345,7 @@ export default function TodayScreen() {
               accessibilityRole="button"
               accessibilityLabel="Log past tummy time manually"
             >
-              Log past tummy time
+              {tr('today.logPastTummy')}
             </Text>
           </View>
         </View>
@@ -382,7 +381,12 @@ export default function TodayScreen() {
         </View>
       )}
 
-      <Modal visible={sheet !== null} animationType="slide" transparent onRequestClose={() => setSheet(null)}>
+      <Modal
+        visible={sheet !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSheet(null)}
+      >
         <View style={[styles.sheetBackdrop]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSheet(null)} />
           <View style={[styles.sheet, { backgroundColor: t.canvas }]}>

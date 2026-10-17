@@ -4,7 +4,6 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
@@ -13,6 +12,8 @@ import { useTheme } from '@/src/design/ThemeProvider';
 import { fontNames, radius, spacing } from '@/src/design/tokens';
 import { useApp } from '@/src/state/AppProvider';
 import { PrimaryButton, Card, SegmentedControl } from '@/src/components/ui';
+import { useI18n } from '@/src/i18n/useI18n';
+import { LOCALES, type Locale } from '@/src/i18n/strings';
 import { buildBackup, dryRunParse, mergeData, type ImportMode, type BackupFile } from '@/src/models/backup';
 import { buildFullBackup, restoreEmbeddedPhotos } from '@/src/models/mediaBackup';
 import { backupFileName, pickBackupFile, shareCsvBundle, shareTextFile } from '@/src/models/share';
@@ -24,7 +25,9 @@ export default function SettingsScreen() {
   const {
     themeMode, setThemeMode, isDemo, enterDemo, exitDemo,
     resetPersonal, exportJson, importData, data, repo, refresh,
+    locale, setLocale, clockFormat, setClockFormat,
   } = useApp();
+  const { t: tr } = useI18n();
   const [message, setMessage] = useState<string | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>('merge');
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -160,7 +163,7 @@ export default function SettingsScreen() {
       {webInput}
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>
-          Settings
+          {tr('settings.title')}
         </Text>
 
         {message && (
@@ -169,73 +172,118 @@ export default function SettingsScreen() {
           </Card>
         )}
 
-        <Section title="Appearance">
+        <Section title={tr('settings.section.appearance')}>
           <Card>
-            <Row
-              label="Night mode"
-              detail="Warm, dim, and fully legible for 3 AM feeds."
-            >
-              <Switch
-                value={themeMode === 'night'}
-                onValueChange={(v) => setThemeMode(v ? 'night' : 'day')}
-                trackColor={{ true: t.accent, false: t.hairline }}
-                thumbColor={themeMode === 'night' ? t.accentInk : '#FFFFFF'}
-                accessibilityLabel="Night mode"
+            <Text style={[styles.rowLabel, { color: t.ink }]}>{tr('settings.nightMode')}</Text>
+            <Text style={[styles.rowDetail, { color: t.inkMuted, marginBottom: spacing(2) }]}>
+              {tr('settings.nightModeDetail')}
+            </Text>
+            <View style={styles.btnCol}>
+              <PrimaryButton
+                label="Day"
+                variant={themeMode === 'day' ? 'primary' : 'secondary'}
+                onPress={() => setThemeMode('day')}
+                accessibilityLabel="Theme: day"
               />
-            </Row>
+              <PrimaryButton
+                label="Night"
+                variant={themeMode === 'night' ? 'primary' : 'secondary'}
+                onPress={() => setThemeMode('night')}
+                accessibilityLabel="Theme: night"
+              />
+              <PrimaryButton
+                label="Night · warm"
+                variant={themeMode === 'nightWarm' ? 'primary' : 'secondary'}
+                onPress={() => setThemeMode('nightWarm')}
+                accessibilityLabel="Theme: warm night"
+              />
+            </View>
           </Card>
         </Section>
 
-        <Section title="Your data">
+        <Section title={tr('settings.section.language')}>
+          <Card>
+            <Text style={[styles.rowLabel, { color: t.ink }]}>{tr('settings.language')}</Text>
+            <Text style={[styles.rowDetail, { color: t.inkMuted, marginBottom: spacing(2) }]}>
+              {tr('settings.languageDetail')}
+            </Text>
+            <View style={styles.btnCol}>
+              {LOCALES.map((l) => (
+                <PrimaryButton
+                  key={l.code}
+                  label={l.nativeLabel}
+                  variant={locale === l.code ? 'primary' : 'secondary'}
+                  onPress={() => setLocale(l.code as Locale)}
+                  accessibilityLabel={`${tr('settings.language')}: ${l.nativeLabel}`}
+                />
+              ))}
+            </View>
+            <View style={{ marginTop: spacing(3) }}>
+              <Text style={[styles.rowLabel, { color: t.ink, marginBottom: spacing(1.5) }]}>
+                {tr('settings.clock')}
+              </Text>
+              <SegmentedControl
+                label={tr('settings.clock')}
+                options={[
+                  { value: '12h' as const, label: tr('settings.clock12') },
+                  { value: '24h' as const, label: tr('settings.clock24') },
+                ]}
+                value={clockFormat}
+                onChange={setClockFormat}
+              />
+            </View>
+          </Card>
+        </Section>
+
+        <Section title={tr('settings.section.data')}>
           <Card>
             <Text style={[styles.dataLine, { color: t.inkMuted }]}>
               {personalCount} care event{personalCount === 1 ? '' : 's'} stored on this device.
               Nothing is synced or uploaded anywhere.
             </Text>
             <View style={styles.btnCol}>
-              <PrimaryButton label="Export backup (JSON)" variant="secondary" onPress={doExport} />
-              <PrimaryButton label="Export care history (CSV)" variant="secondary" onPress={doCsvExport} />
-              <PrimaryButton label="Import a backup" variant="secondary" onPress={pickImport} />
+              <PrimaryButton label={tr('settings.exportJson')} variant="secondary" onPress={doExport} />
+              <PrimaryButton label={tr('settings.exportCsv')} variant="secondary" onPress={doCsvExport} />
+              <PrimaryButton label={tr('settings.import')} variant="secondary" onPress={pickImport} />
             </View>
             <View style={{ marginTop: spacing(3) }}>
-              <Text style={[styles.importModeLabel, { color: t.ink }]}>When importing:</Text>
+              <Text style={[styles.importModeLabel, { color: t.ink }]}>{tr('settings.importMode')}</Text>
               <SegmentedControl
                 label="Import mode"
                 options={[
-                  { value: 'merge' as const, label: 'Merge' },
-                  { value: 'replace' as const, label: 'Replace all' },
+                  { value: 'merge' as const, label: tr('settings.importModeMerge') },
+                  { value: 'replace' as const, label: tr('settings.importModeReplace') },
                 ]}
                 value={importMode}
                 onChange={setImportMode}
               />
               <Text style={[styles.importModeHint, { color: t.inkFaint }]}>
-                Merge adds new records and keeps everything you have. Replace erases current
-                records first. Either way the file is fully checked before anything changes.
+                {tr('settings.importModeHint')}
               </Text>
             </View>
             <PrimaryButton
-              label="Erase all data"
+              label={tr('settings.erase')}
               onPress={confirmErase}
               style={{ backgroundColor: t.cinnamon, marginTop: spacing(3) }}
             />
           </Card>
         </Section>
 
-        <Section title="Demo mode">
+        <Section title={tr('settings.section.demo')}>
           <Card>
             <Text style={[styles.dataLine, { color: t.inkMuted }]}>
               Demo mode fills the app with clearly marked synthetic records so you can explore
               freely. It never touches real data.
             </Text>
             <PrimaryButton
-              label={isDemo ? 'Exit demo mode' : 'Try demo mode'}
+              label={isDemo ? tr('settings.exitDemo') : tr('settings.tryDemo')}
               variant="secondary"
               onPress={confirmDemo}
             />
           </Card>
         </Section>
 
-        <Section title="About">
+        <Section title={tr('settings.section.about')}>
           <Card>
             <Text style={[styles.about, { color: t.inkMuted }]}>
               NinniNest is a local-first care journal. Core tracking, history, export and erase

@@ -9,11 +9,13 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { useTheme } from '@/src/design/ThemeProvider';
 import { fontNames, radius, spacing } from '@/src/design/tokens';
 import { PrimaryButton } from '@/src/components/ui';
 import { useApp } from '@/src/state/AppProvider';
+import { useI18n } from '@/src/i18n/useI18n';
+import { BRAND } from '@/src/i18n/brand';
 import type { Baby } from '@/src/models/types';
 
 function isValidDate(s: string): boolean {
@@ -22,9 +24,26 @@ function isValidDate(s: string): boolean {
   return !Number.isNaN(d.getTime()) && d.getTime() <= Date.now();
 }
 
+// Journal motif: a single calm line drawing a night arc over a horizon dot.
+function Motif({ color, dot }: { color: string; dot: string }) {
+  return (
+    <Svg width={160} height={56} viewBox="0 0 160 56">
+      <Path
+        d="M6 44 C 40 10, 84 50, 120 20 S 154 30, 154 30"
+        stroke={color}
+        strokeWidth={2.5}
+        fill="none"
+        strokeLinecap="round"
+      />
+      <Circle cx={28} cy={12} r={2.5} fill={dot} />
+    </Svg>
+  );
+}
+
 export default function OnboardingScreen() {
   const t = useTheme();
   const { addBaby } = useApp();
+  const { t: tr } = useI18n();
   const [name, setName] = useState('');
   const [birth, setBirth] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -32,11 +51,11 @@ export default function OnboardingScreen() {
 
   const save = async () => {
     if (!name.trim()) {
-      setError('Please give your baby a nickname.');
+      setError(tr('onb.errName'));
       return;
     }
     if (!isValidDate(birth.trim())) {
-      setError('Enter the birth date as YYYY-MM-DD (for example 2026-08-14).');
+      setError(tr('onb.errDate'));
       return;
     }
     setSaving(true);
@@ -51,7 +70,7 @@ export default function OnboardingScreen() {
     if (ok) {
       router.replace('/(main)/today');
     } else {
-      setError('Could not save. Please try again — nothing was written yet.');
+      setError(tr('onb.errSave'));
     }
   };
 
@@ -61,50 +80,41 @@ export default function OnboardingScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Svg width={120} height={44} viewBox="0 0 120 44" style={styles.motif}>
-          <Path
-            d="M4 36 C 30 8, 62 44, 88 16 S 116 28, 116 28"
-            stroke={t.accent}
-            strokeWidth={2.5}
-            fill="none"
-            strokeLinecap="round"
-          />
-        </Svg>
+        <Text style={[styles.brand, { color: t.inkFaint }]}>{BRAND.name}</Text>
+        <Motif color={t.accent} dot={t.cinnamon} />
         <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>
-          A quiet place for
+          {tr('onb.title1')}
         </Text>
         <Text style={[styles.title, { color: t.accent, fontFamily: fontNames.display }]}>
-          the small hours
+          {tr('onb.title2')}
         </Text>
-        <Text style={[styles.subtitle, { color: t.inkMuted }]}>
-          No account. No cloud. Everything stays on this device until you choose to share it.
-        </Text>
+        <Text style={[styles.subtitle, { color: t.inkMuted }]}>{tr('onb.subtitle')}</Text>
 
         <View style={styles.form}>
-          <Text style={[styles.label, { color: t.ink }]}>Nickname</Text>
+          <Text style={[styles.label, { color: t.ink }]}>{tr('onb.nickname')}</Text>
           <TextInput
             style={[styles.input, { backgroundColor: t.surface, color: t.ink, borderColor: t.hairline }]}
             value={name}
             onChangeText={setName}
-            placeholder="What do you call them?"
+            placeholder={tr('onb.nicknamePlaceholder')}
             placeholderTextColor={t.inkFaint}
             maxLength={40}
-            accessibilityLabel="Baby nickname"
+            accessibilityLabel={tr('onb.nickname')}
           />
-          <Text style={[styles.label, { color: t.ink }]}>Date of birth</Text>
+          <Text style={[styles.label, { color: t.ink }]}>{tr('onb.birth')}</Text>
           <TextInput
             style={[styles.input, { backgroundColor: t.surface, color: t.ink, borderColor: t.hairline }]}
             value={birth}
             onChangeText={setBirth}
-            placeholder="YYYY-MM-DD"
+            placeholder={tr('onb.birthPlaceholder')}
             placeholderTextColor={t.inkFaint}
             keyboardType={Platform.OS === 'web' ? 'default' : 'numbers-and-punctuation'}
             maxLength={10}
-            accessibilityLabel="Baby date of birth"
+            accessibilityLabel={tr('onb.birth')}
           />
           {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
           <PrimaryButton
-            label={saving ? 'Saving…' : 'Begin the journal'}
+            label={saving ? tr('onb.saving') : tr('onb.begin')}
             onPress={save}
             disabled={saving}
             style={{ marginTop: spacing(3), minHeight: 52 }}
@@ -122,6 +132,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing(4),
     paddingBottom: spacing(8),
+  },
+  brand: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+    marginBottom: spacing(2),
   },
   motif: { marginBottom: spacing(3) },
   title: {

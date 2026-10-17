@@ -1,4 +1,4 @@
-export type ThemeMode = 'day' | 'night';
+export type ThemeMode = 'day' | 'night' | 'nightWarm';
 
 export const palette = {
   ivory: '#F7F5F0',
@@ -65,7 +65,30 @@ export const nightTheme: Theme = {
   hairline: '#2E3F44',
 };
 
-export const themes: Record<ThemeMode, Theme> = { day: dayTheme, night: nightTheme };
+// Dedicated warm night theme: lower luminance, amber-shifted accents, deep
+// brown-red ink tones. For 3 AM use — deliberately dimmer than `night`.
+export const nightWarmTheme: Theme = {
+  mode: 'nightWarm',
+  canvas: '#191210',
+  surface: '#221A15',
+  surfaceAlt: '#1D1512',
+  ribbon: '#2A1F18',
+  ink: '#F0E4D4',
+  inkMuted: '#B7A692',
+  inkFaint: '#8D7D6D',
+  accent: '#D9A05B',
+  accentSoft: '#33261C',
+  accentInk: '#191210',
+  cinnamon: '#C98B6A',
+  sage: '#4A3F33',
+  hairline: '#33281F',
+};
+
+export const themes: Record<ThemeMode, Theme> = {
+  day: dayTheme,
+  night: nightTheme,
+  nightWarm: nightWarmTheme,
+};
 
 export const fontNames = {
   regular: 'DMSans-Regular',

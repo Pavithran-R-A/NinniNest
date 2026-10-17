@@ -14,16 +14,20 @@ Read `docs/01_PROJECT_KNOWLEDGE.md` first. Key operational rules:
    `npx expo export --platform web`. Report real exit codes. Never invent passing checks.
 7. Keep the "Quiet Observatory" design language: tokens from `src/design/tokens.ts`,
    DM Sans for UI, Fraunces only for display headlines, 48dp+ primary targets.
-8. Update `FEATURE_STATUS.md` and `CHANGELOG.md` when features change.
-9. Never claim device behaviour that was only verified in the browser preview.
-10. Photos on native must be copied into `Documents/ninninest-media/<babyId>/` via
+8. User-visible strings come from `src/i18n/strings.ts`; never hardcode UI copy in
+   screens. The English pack must stay complete — `tests/i18n.test.ts` enforces it.
+9. Brand name lives only in `src/i18n/brand.ts` (+ app.json assets); trademark
+   clearance is pending, so a rename must remain a one-file change.
+10. Update `FEATURE_STATUS.md` and `CHANGELOG.md` when features change.
+11. Never claim device behaviour that was only verified in the browser preview.
+12. Photos on native must be copied into `Documents/ninninest-media/<babyId>/` via
    `src/models/media.ts`; never store raw picker URIs. Cleanup is scoped per baby.
-11. Backups are versioned (`src/models/backup.ts`, v4). Imports must dry-run validate
+13. Backups are versioned (`src/models/backup.ts`, v4). Imports must dry-run validate
    first and use merge or a single transactional replace — never partial writes.
-12. Dates must pass `isCalendarValid` (`src/models/calendar.ts`) — shape alone is not
+14. Dates must pass `isCalendarValid` (`src/models/calendar.ts`) — shape alone is not
    enough. Analytics live in `src/models/analytics.ts` and must stay deterministic.
-13. Routine reminders (`src/models/notifications.ts`) are informational only and must
+15. Routine reminders (`src/models/notifications.ts`) are informational only and must
    never create medication administrations or journal entries.
-14. Android build commands live in `docs/ANDROID_BUILD.md`; never claim an APK or
+16. Android build commands live in `docs/ANDROID_BUILD.md`; never claim an APK or
     device result that was not actually produced — record it in
     `docs/DEVICE_TEST_MATRIX.md` with VERIFIED/FAILED/NOT TESTED instead.

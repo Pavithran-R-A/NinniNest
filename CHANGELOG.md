@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## 0.6.0 — 2026-10-17 (Phase F — consumer experience, i18n, identity)
+
+### Added
+- Localization foundation: typed string packs with English complete and Tamil
+  covering navigation, onboarding, Today, Journal, Handoff and Settings; runtime
+  English fallback for untranslated keys; language picker in Settings; locale
+  persisted across launches.
+- 12/24-hour time display preference, persisted; the handoff letter and all clock
+  renderings honor it.
+- Third theme "Night · warm" — a dimmer, amber-shifted variant for 3 AM use —
+  selectable alongside Day and Night.
+- Original vector brand assets: night-arc icon and Android adaptive-icon foreground
+  (SVG sources + rendered PNGs), wired into app.json icon/splash/adaptive config.
+- Central brand constant so the product name can be renamed in one place while
+  trademark clearance is pending.
+- Duplicate-save protection: rapid double-taps on save/stop actions can no longer
+  create duplicate records.
+- Phase F implementation matrix and visual QA checklist documents.
+
+### Fixed
+- Family tab labels, Insights headings, Settings controls and all Today strings now
+  localize; English pack verified complete against Tamil keys by unit test.
+
+### Verification
+- 129/129 tests (11 files, 8 new i18n tests) · typecheck exit 0 · expo-doctor 21/21 ·
+  prebuild exit 0 with adaptive icons verified. No rendered visual QA was possible in
+  this environment — a checklist with capture instructions is provided instead.
+
 ## 0.5.0 — 2026-10-17 (Phase E — build readiness, restore integrity, handoff)
 
 ### Added

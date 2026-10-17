@@ -36,15 +36,16 @@ import { EmptyState } from '@/src/components/ui';
 import {
   BabyForm, GrowthForm, MilestoneForm, MedicationForm, VaccinationForm, RoutineForm,
 } from '@/src/screens/FamilyForms';
+import { useI18n } from '@/src/i18n/useI18n';
 
 type FamilyTab = 'profiles' | 'growth' | 'milestones' | 'health' | 'routines';
 
-const TABS: { key: FamilyTab; label: string; icon: React.ReactNode }[] = [
-  { key: 'profiles', label: 'Profiles', icon: <BabyIcon size={16} strokeWidth={2} /> },
-  { key: 'growth', label: 'Growth', icon: <Ruler size={16} strokeWidth={2} /> },
-  { key: 'milestones', label: 'Milestones', icon: <Star size={16} strokeWidth={2} /> },
-  { key: 'health', label: 'Health', icon: <Pill size={16} strokeWidth={2} /> },
-  { key: 'routines', label: 'Routines', icon: <Repeat size={16} strokeWidth={2} /> },
+const TABS: { key: FamilyTab; labelKey: string; icon: React.ReactNode }[] = [
+  { key: 'profiles', labelKey: 'family.tab.profiles', icon: <BabyIcon size={16} strokeWidth={2} /> },
+  { key: 'growth', labelKey: 'family.tab.growth', icon: <Ruler size={16} strokeWidth={2} /> },
+  { key: 'milestones', labelKey: 'family.tab.milestones', icon: <Star size={16} strokeWidth={2} /> },
+  { key: 'health', labelKey: 'family.tab.health', icon: <Pill size={16} strokeWidth={2} /> },
+  { key: 'routines', labelKey: 'family.tab.routines', icon: <Repeat size={16} strokeWidth={2} /> },
 ];
 
 export default function FamilyScreen() {
@@ -59,6 +60,7 @@ export default function FamilyScreen() {
     addRoutine, deleteRoutine,
     setActiveBaby,
   } = useApp();
+  const { t: tr } = useI18n();
 
   const [tab, setTab] = useState<FamilyTab>('profiles');
   const [sheet, setSheet] = useState<string | null>(null);
@@ -128,11 +130,11 @@ export default function FamilyScreen() {
     return (
       <SafeAreaView style={[styles.flex, { backgroundColor: t.canvas }]} edges={['top']}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>Family</Text>
+          <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>{tr('family.title')}</Text>
         </View>
         <EmptyState
-          title="No profiles yet"
-          body="Create a profile for each child — twins and siblings each get their own journal, timers and history."
+          title={tr('family.noBaby.title')}
+          body={tr('family.noBaby.body')}
         />
         <View style={styles.centerBtnWrap}>
           <Pressable
@@ -173,7 +175,7 @@ export default function FamilyScreen() {
   return (
     <SafeAreaView style={[styles.flex, { backgroundColor: t.canvas }]} edges={['top']}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>Family</Text>
+        <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>{tr('family.title')}</Text>
         {showBabyPicker && currentBaby ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.babyPicker} style={{ marginTop: spacing(2) }}>
             {personalBabies.map((b) => (
@@ -210,7 +212,7 @@ export default function FamilyScreen() {
                 color: tab === item.key ? t.accent : t.inkMuted,
               })}
             </View>
-            <Text style={[styles.tabText, { color: tab === item.key ? t.accent : t.inkMuted }]}>{item.label}</Text>
+            <Text style={[styles.tabText, { color: tab === item.key ? t.accent : t.inkMuted }]}>{tr(item.labelKey)}</Text>
           </Pressable>
         ))}
       </View>

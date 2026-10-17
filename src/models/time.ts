@@ -1,3 +1,5 @@
+import type { ClockFormat } from '@/src/i18n/strings';
+
 export function formatDuration(min: number): string {
   const m = Math.max(0, Math.round(min));
   const h = Math.floor(m / 60);
@@ -16,9 +18,14 @@ export function toLocalParts(iso: string): { hours: number; minutes: number } {
   return { hours: d.getHours(), minutes: d.getMinutes() };
 }
 
-export function formatClock(iso: string): string {
+// hour12 is inferred when undefined; an explicit ClockFormat overrides it.
+export function formatClock(iso: string, clock?: ClockFormat): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(clock ? { hour12: clock === '12h' } : {}),
+  });
 }
 
 export function localDateKey(d: Date = new Date()): string {

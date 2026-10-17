@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- NinniNest adaptive-icon foreground: same arc + dot on transparent, with the
+       safe-zone margin required by Android adaptive icons (66% content zone). -->
+  <path d="M 280 640 C 400 360, 580 680, 700 470 S 850 550, 850 550"
+        fill="none" stroke="#286F08" stroke-width="44" stroke-linecap="round"/>
+  <path d="M 280 640 C 400 360, 580 680, 700 470 S 850 550, 850 550"
+        fill="none" stroke="#286F68" stroke-width="44" stroke-linecap="round"/>
+  <circle cx="390" cy="380" r="22" fill="#AB6F53"/>
+</svg>

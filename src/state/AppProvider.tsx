@@ -20,10 +20,18 @@ import {
   sanitizeSegments,
 } from '@/src/models/timers';
 import type { ThemeMode } from '@/src/design/tokens';
+import type { Locale, ClockFormat } from '@/src/i18n/strings';
+import { makeT, type TFunc } from '@/src/i18n/strings';
 
 type Status = 'loading' | 'ready' | 'error';
 
 const ACTIVE_BABY_KEY = 'ninninest.activeBabyId';
+const LOCALE_KEY = 'ninninest.locale';
+const CLOCK_KEY = 'ninninest.clockFormat';
+
+// In-flight write guards: prevent double-taps from creating duplicate records.
+const eventWrites = new Set<string>();
+const stoppingTimers = new Set<string>();
 
 interface AppContextValue {
   status: Status;
@@ -36,6 +44,11 @@ interface AppContextValue {
   setActiveBaby: (id: string) => void;
   themeMode: ThemeMode;
   setThemeMode: (m: ThemeMode) => void;
+  locale: Locale;
+  setLocale: (l: Locale) => void;
+  clockFormat: ClockFormat;
+  setClockFormat: (c: ClockFormat) => void;
+  t: TFunc;
   refresh: () => Promise<void>;
   addBaby: (baby: Baby) => Promise<boolean>;
   updateBaby: (baby: Baby) => Promise<boolean>;
@@ -87,6 +100,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isDemo, setIsDemo] = useState(false);
   const [activeBabyId, setActiveBabyIdState] = useState<string | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>('day');
+  const [locale, setLocaleState] = useState<Locale>('en');
+  const [clockFormat, setClockFormatState] = useState<ClockFormat>('12h');
+
+  const t = useMemo(() => makeT(locale), [locale]);
+
+  const setLocale = useCallback((l: Locale) => {
+    setLocaleState(l);
+    AsyncStorage.setItem(LOCALE_KEY, l).catch(() => {});
+  }, []);
+
+  const setClockFormat = useCallback((c: ClockFormat) => {
+    setClockFormatState(c);
+    AsyncStorage.setItem(CLOCK_KEY, c).catch(() => {});
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -135,6 +162,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await repo.init();
         const stored = await AsyncStorage.getItem(ACTIVE_BABY_KEY).catch(() => null);
         if (!cancelled && stored) setActiveBabyIdState(stored);
+        const storedLocale = await AsyncStorage.getItem(LOCALE_KEY).catch(() => null);
+        if (!cancelled && (storedLocale === 'en' || storedLocale === 'ta')) setLocaleState(storedLocale);
+        const storedClock = await AsyncStorage.getItem(CLOCK_KEY).catch(() => null);
+        if (!cancelled && (storedClock === '12h' || storedClock === '24h')) setClockFormatState(storedClock);
         await refresh();
         if (!cancelled) setStatus('ready');
       } catch (e) {
@@ -153,6 +184,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const persistEvent = useCallback(
     async (event: CareEvent, mode: 'add' | 'update'): Promise<boolean> => {
       if (isDemo && !event.isDemo) return false;
+      if (eventWrites.has(event.id)) return false; // double-tap guard
+      eventWrites.add(event.id);
       try {
         if (mode === 'add') await repo.addEvent(event);
         else await repo.updateEvent(event);
@@ -160,6 +193,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return true;
       } catch {
         return false;
+      } finally {
+        eventWrites.delete(event.id);
       }
     },
     [repo, refresh, isDemo]
@@ -295,6 +330,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ) => {
       const timer = data.activeTimers.find((t) => t.id === timerId);
       if (!timer) return false;
+      if (stoppingTimers.has(timerId)) return false; // double-tap guard
+      stoppingTimers.add(timerId);
       try {
         await repo.deleteTimer(timerId);
         const minutes =
@@ -322,6 +359,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return true;
       } catch {
         return false;
+      } finally {
+        stoppingTimers.delete(timerId);
       }
     },
     [repo, refresh, data.activeTimers]
@@ -474,6 +513,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     currentBabyId: currentBaby?.id ?? null,
     setActiveBaby,
     themeMode, setThemeMode,
+    locale, setLocale, clockFormat, setClockFormat, t,
     refresh, addBaby, updateBaby, deleteBaby,
     addEvent, updateEvent, deleteEvent, addTimer, updateTimer, stopTimer,
     pauseActiveTimer, resumeActiveTimer, switchActiveTimerSide,

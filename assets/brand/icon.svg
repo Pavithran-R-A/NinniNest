@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- NinniNest original icon: night arc over a cradle-line, Quiet Observatory motif.
+       Drawn from the in-app onboarding motif (single stroke + horizon dot). -->
+  <rect width="1024" height="1024" rx="0" fill="#F7F5F0"/>
+  <path d="M 200 640 C 340 300, 560 700, 720 430 S 900 540, 900 540"
+        fill="none" stroke="#286F68" stroke-width="46" stroke-linecap="round"/>
+  <circle cx="330" cy="330" r="24" fill="#AB6F53"/>
+  <path d="M 200 740 H 824" stroke="#24343C" stroke-width="10" stroke-linecap="round" opacity="0.25"/>
+</svg>

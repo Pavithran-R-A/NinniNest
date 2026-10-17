@@ -32,7 +32,8 @@ APK.
 - Read `AGENTS.md` (working rules) and `docs/01_PROJECT_KNOWLEDGE.md`.
 - Architecture: `app/` routes · `src/data` repository pattern (SQLite native /
   IndexedDB web behind `CareRepository`) · `src/models` pure logic + zod validation ·
-  `src/design` tokens/ThemeProvider · `src/state` AppProvider.
+  `src/design` tokens/ThemeProvider · `src/i18n` string packs (en/ta) + brand ·
+  `src/state` AppProvider.
 - Tests use vitest and must never import React Native modules; pure logic lives in
   dependency-free files (e.g. `src/models/hash.ts`).
 - First recommended tasks: run the device matrix (`docs/DEVICE_TEST_MATRIX.md`),

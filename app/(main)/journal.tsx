@@ -8,10 +8,12 @@ import { localDateKey } from '@/src/models/time';
 import { EventRibbonItem } from '@/src/components/EventRibbon';
 import { EmptyState } from '@/src/components/ui';
 import { EventActionsModal } from '@/src/screens/EventActions';
+import { useI18n } from '@/src/i18n/useI18n';
 
 export default function JournalScreen() {
   const t = useTheme();
   const { currentBaby, data, isDemo } = useApp();
+  const { t: tr } = useI18n();
   const [selected, setSelected] = useState<string | null>(null);
 
   const sections = useMemo(() => {
@@ -42,16 +44,16 @@ export default function JournalScreen() {
     <SafeAreaView style={[styles.flex, { backgroundColor: t.canvas }]} edges={['top']}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: t.ink, fontFamily: fontNames.display }]}>
-          Journal
+          {tr('journal.title')}
         </Text>
         <Text style={[styles.subtitle, { color: t.inkMuted }]}>
-          {currentBaby ? `${currentBaby.name} · full history` : ''}
+          {currentBaby ? tr('journal.subtitle', { name: currentBaby.name }) : ''}
         </Text>
       </View>
       {sections.length === 0 ? (
         <EmptyState
-          title="Nothing recorded yet"
-          body="Your journal fills in as you log care events on the Today screen."
+          title={tr('journal.empty.title')}
+          body={tr('journal.empty.body')}
         />
       ) : (
         <SectionList
@@ -72,7 +74,7 @@ export default function JournalScreen() {
         onClose={() => setSelected(null)}
       />
       {isDemo ? (
-        <Text style={[styles.demoTag, { color: t.inkMuted }]}>Demo data — not your records</Text>
+        <Text style={[styles.demoTag, { color: t.inkMuted }]}>{tr('journal.demoTag')}</Text>
       ) : null}
     </SafeAreaView>
   );

@@ -1,6 +1,6 @@
 # FEATURE_STATUS.md
 
-Last updated: 2026-10-17 (Phase E — build readiness, restore integrity, handoff)
+Last updated: 2026-10-17 (Phase F — consumer experience, i18n, brand identity)
 
 ## Working (implemented and persisted)
 
@@ -51,11 +51,20 @@ Last updated: 2026-10-17 (Phase E — build readiness, restore integrity, handof
 | **Handoff documentation** | DONE — `docs/ANDROID_BUILD.md`, `DEVICE_TEST_MATRIX.md`, `BACKUP_RESTORE_AUDIT.md`, `EXPORT_HANDOFF.md`, `KNOWN_LIMITATIONS.md` |
 | **Visual QA** | PARTIAL — code-review pass only (no rendered browser); touch-target fix applied to Today quick links |
 
+## Phase F additions
+| Feature | Status |
+| --- | --- |
+| **Localization foundation** | DONE — typed i18n module (en + ta). English complete; Tamil complete for nav, common, onboarding, Today, Journal, Handoff, Settings; deeper strings fall back to English (documented). Locale persisted. |
+| **12/24-hour setting** | DONE — persisted preference; handoff letter and clock displays honor it via `formatClock(iso, clock)` |
+| **Warm Night theme** | DONE — third theme `nightWarm` (amber-shifted, lower luminance); 3-way picker in Settings |
+| **Brand identity** | DONE — original vector icon/adaptive-foreground SVG sources rendered to PNG via ImageMagick; wired into app.json (icon, adaptive icon, splash, favicon); central `BRAND` constant for trademark-pending rename |
+| **Duplicate-save guard** | DONE — in-flight write locks on event persist and timer stop prevent double-tap duplicates |
+| **Screen localization** | DONE for tabs, onboarding, Today, Journal, Handoff, Insights, Settings, Family tab bar |
+| **Visual QA** | NOT RENDERED — no browser in sandbox; `docs/VISUAL_QA_CHECKLIST.md` prepared with capture procedure |
+
 ## Verification evidence (this phase)
 - `npx tsc --noEmit` (strict): exit 0
-- `npm test`: exit 0 — **121/121 tests, 10 files** (11 new backup-integrity tests)
+- `npm test`: exit 0 — **129/129 tests, 11 files** (8 new i18n tests)
 - `npx expo-doctor`: exit 0 — 21/21
-- `npx expo export --platform web`: exit 0
-- `npx expo prebuild --platform android --no-install --clean`: exit 0 (config verified; generated folder removed again to keep managed workflow)
-- `npx eas-cli whoami`: **"Not logged in"** — no build possible; honestly recorded
-- Rendered browser / device runs: impossible in this environment (no browser or device tooling); documented rather than claimed
+- `npx expo prebuild --platform android`: exit 0 — adaptive icon assets verified in generated res/
+- Rendered browser / device runs: impossible in this environment; checklist prepared instead of claiming visual QA
