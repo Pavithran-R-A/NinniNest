@@ -78,6 +78,7 @@ describe('validateTimer', () => {
         babyId: baby.id,
         kind: 'sleep',
         startedAt: '2026-10-17T09:00:00.000Z',
+        segments: [{ start: '2026-10-17T09:00:00.000Z', end: null }],
       })
     ).not.toBeNull();
   });
@@ -114,7 +115,7 @@ describe('demo isolation', () => {
       babies: [baby],
       events: [demo, personal] as unknown as CareEvent[],
       activeTimers: [],
-      schemaVersion: 1,
+      schemaVersion: 2,
     };
     const personalEvents = data.events.filter((e) => !e.isDemo);
     expect(personalEvents).toHaveLength(1);

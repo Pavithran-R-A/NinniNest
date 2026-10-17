@@ -2,7 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import type { ActiveTimer, AppData, Baby, CareEvent } from '../models/types';
 import type { CareRepository } from './CareRepository';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export class SqliteCareRepository implements CareRepository {
   private db: SQLite.SQLiteDatabase | null = null;
@@ -47,6 +47,25 @@ export class SqliteCareRepository implements CareRepository {
         'schema_version',
         String(SCHEMA_VERSION),
       ]);
+    } else if (Number(row.value) < 2) {
+      // Migration v1 -> v2: legacy single-start timers become a single running segment.
+      await this.db.execAsync(`
+        ALTER TABLE active_timers ADD COLUMN segments TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE active_timers ADD COLUMN lastSide TEXT;
+      `);
+      const legacy = await this.db.getAllAsync<{ id: string; startedAt: string }>(
+        'SELECT id, startedAt FROM active_timers'
+      );
+      for (const t of legacy) {
+        await this.db.runAsync('UPDATE active_timers SET segments = ? WHERE id = ?', [
+          JSON.stringify([{ start: t.startedAt, end: null }]),
+          t.id,
+        ]);
+      }
+      await this.db.runAsync('UPDATE meta SET value = ? WHERE key = ?', [
+        String(SCHEMA_VERSION),
+        'schema_version',
+      ]);
     }
   }
 
@@ -74,16 +93,27 @@ export class SqliteCareRepository implements CareRepository {
     }
     const activeTimers: ActiveTimer[] = [];
     const timerRows = await this.db.getAllAsync<{
-      id: string; babyId: string; kind: string; startedAt: string; side: string | null; isDemo: number;
+      id: string; babyId: string; kind: string; startedAt: string; side: string | null;
+      segments: string | null; lastSide: string | null; isDemo: number;
     }>('SELECT * FROM active_timers');
     for (const r of timerRows) {
+      let segments: ActiveTimer['segments'] = [];
+      try {
+        const parsed = r.segments ? (JSON.parse(r.segments) as ActiveTimer['segments']) : [];
+        if (Array.isArray(parsed) && parsed.length > 0) segments = parsed;
+      } catch {
+        // fall through to legacy reconstruction
+      }
+      if (segments.length === 0) segments = [{ start: r.startedAt, end: null }];
       activeTimers.push({
         id: r.id, babyId: r.babyId, kind: r.kind as ActiveTimer['kind'],
         startedAt: r.startedAt, side: (r.side ?? undefined) as ActiveTimer['side'],
+        segments,
+        lastSide: (r.lastSide ?? undefined) as ActiveTimer['lastSide'],
         isDemo: r.isDemo === 1,
       });
     }
-    return { babies, events, activeTimers, schemaVersion: 1 };
+    return { babies, events, activeTimers, schemaVersion: 2 as const };
   }
 
   async addBaby(baby: Baby): Promise<void> {
@@ -128,8 +158,11 @@ export class SqliteCareRepository implements CareRepository {
   async addTimer(timer: ActiveTimer): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
     await this.db.runAsync(
-      'INSERT OR REPLACE INTO active_timers (id, babyId, kind, startedAt, side, isDemo) VALUES (?, ?, ?, ?, ?, ?)',
-      [timer.id, timer.babyId, timer.kind, timer.startedAt, timer.side ?? null, timer.isDemo ? 1 : 0]
+      'INSERT OR REPLACE INTO active_timers (id, babyId, kind, startedAt, side, segments, lastSide, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        timer.id, timer.babyId, timer.kind, timer.startedAt, timer.side ?? null,
+        JSON.stringify(timer.segments), timer.lastSide ?? null, timer.isDemo ? 1 : 0,
+      ]
     );
   }
 

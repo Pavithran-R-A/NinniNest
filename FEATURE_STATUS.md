@@ -1,6 +1,6 @@
 # FEATURE_STATUS.md
 
-Last updated: 2026-10-17 (PROMPT A slice + preview diagnostic pass)
+Last updated: 2026-10-17 (Phase B — complete essential care logging)
 
 ## Working (implemented and persisted)
 
@@ -8,43 +8,41 @@ Last updated: 2026-10-17 (PROMPT A slice + preview diagnostic pass)
 | --- | --- |
 | Welcome + no-account onboarding | DONE — nickname/birth date, validated, persisted |
 | Today dashboard | DONE — greeting, age, last feed/diaper/sleep band, event ribbon |
-| Diaper quick log | DONE — wet/dirty/both + optional note |
-| Bottle quick log | DONE — mL + milk type, validated |
-| Breastfeed L/R timers | DONE — timestamp-based, persisted across restart |
-| Sleep timer | DONE — timestamp-based |
-| Notes | DONE |
+| Diaper quick log | DONE — wet/dirty/both + optional note; repeat-last prefill |
+| Bottle quick log | DONE — canonical mL, mL/oz toggle with live conversion, breast milk/formula/mixed |
+| Breastfeeding timers | DONE — segment-based: pause/resume, side switching, last-side memory, manual correction, history |
+| Pumping | DONE — dock timer with finish sheet (amount/side/note), manual entry, editable history |
+| Sleep | DONE — start/pause/resume/stop timer, manual past entry, overnight-safe (timestamp math), restart-safe |
+| Tummy time | DONE — persistent stopwatch + manual entries + history |
+| Solids | DONE — food, quantity, reaction (observed, not a diagnosis), notes |
+| Repeat last log | DONE — newest non-note event, prefilled editable form, fresh timestamp |
+| Multi-timer display | DONE — all active timers render as badges simultaneously |
+| Entry editing | DONE — every event editable, including time correction (date + hh:mm, future rejected) |
 | Journal ribbon | DONE — grouped by day, tap for edit/delete with confirm |
 | Care handoff | DONE — 12h/24h letter from real data, copy + share |
 | Night mode | DONE — day/midnight themes via Settings |
-| JSON export | DONE — web download; native uses share sheet (long-history caveat) |
-| JSON import (web) | DONE — validated, rejects malformed files |
+| JSON export / import (web) | DONE — validated, schema v2 |
 | Demo mode | DONE — synthetic, labelled, fully isolated; exiting removes it |
 | Erase all data | DONE — with confirmation |
-| Bundled fonts (DM Sans + Fraunces) | DONE — loaded in root layout; previously referenced but never loaded |
-| Unit tests | 27 passing (time, validation, demo isolation) |
+| Bundled fonts | DONE — DM Sans + Fraunces loaded in root layout |
+| Unit tests | 51 passing (time, timers/segments, validation, repeat, demo isolation) |
 
-## Explicitly not yet built (BLOCKED / pending future prompts)
+## Explicitly not yet built (pending future prompts)
 
 | Feature | Status |
 | --- | --- |
-| Pump logging UI (timer restore exists in model) | PENDING — model supports it, no sheet yet |
-| Tummy-time quick log | PENDING — model supports it, no button yet |
-| Solids quick log | PENDING — model supports it, no button yet |
-| Repeat previous log | NOT STARTED |
-| mL/oz toggle in forms | NOT STARTED (conversion helpers exist + tested) |
 | Insights (7d/30d) | NOT STARTED |
 | Tamil/Hindi localization | NOT STARTED (architecture documented) |
 | Multiple baby profiles + switcher | NOT STARTED (isolation by babyId already enforced) |
 | CSV export | NOT STARTED |
 | Import on native | BLOCKED — needs file picker; web import works |
 | Real-device verification (APK, timers, TalkBack) | BLOCKED — no device in this environment |
-| Rendered browser smoke test (journeys, refresh persistence, night mode) | BLOCKED — this environment has no browser/screenshot tool; bundle-level static verification passed. See RELEASE_EVIDENCE.md |
+| Rendered browser smoke test | BLOCKED — no browser/screenshot tool here; bundle-level verification passed (see RELEASE_EVIDENCE.md) |
 
 ## Verification evidence
 
-- `npm run typecheck` — exit 0 (re-verified after every change)
-- `npm test` — exit 0, 27/27 tests pass
-- `npx expo export --platform web` — exit 0, bundles produced in `dist/`, including font TTFs
-- `npx expo start --web` probe — server boots, HTTP 200 on root, bundle compiles clean
-- Bundle content check — all 6 screens' code present in exported JS, IndexedDB repo included
-- No browser-rendered or device run was possible in this environment.
+- `npm run typecheck` — exit 0 (strict, re-run after every change)
+- `npm test` — exit 0, 51/51 tests pass (6 files)
+- `npx expo export --platform web` — exit 0; the exported entry bundle contains the new
+  Phase B flows (solids form, pump finish, repeat-last) verified by bundle string search
+- No rendered-browser or device run was possible in this environment.

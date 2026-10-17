@@ -51,11 +51,12 @@ export function buildDemoData(): AppData {
       babyId: DEMO_BABY_ID,
       kind: 'sleep',
       startedAt: iso(25),
+      segments: [{ start: iso(25), end: null }],
       isDemo: true,
     },
   ];
 
-  return { babies: [baby], events, activeTimers, schemaVersion: 1 };
+  return { babies: [baby], events, activeTimers, schemaVersion: 2 };
 }
 
 export const DEMO_BABY_ID_CONSTANT = DEMO_BABY_ID;

@@ -54,6 +54,7 @@ export const careEventSchema = z.discriminatedUnion('type', [
     type: z.literal('pump'),
     amountMl: z.number().min(0).max(2000),
     durationMin: z.number().min(0).max(240),
+    side: z.enum(['left', 'right', 'both']).optional(),
   }),
   z.object({
     ...baseEventShape,
@@ -67,13 +68,27 @@ export const careEventSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
+const timerSegmentSchema = z.object({
+  start: isoSchema,
+  end: isoSchema.nullable(),
+});
+
 export const activeTimerSchema = z.object({
   id: idSchema,
   babyId: idSchema,
   kind: z.enum(['feed_breast', 'sleep', 'tummy_time', 'pump']),
   startedAt: isoSchema,
   side: z.enum(['left', 'right', 'both']).optional(),
+  segments: z.array(timerSegmentSchema).min(1),
+  lastSide: z.enum(['left', 'right', 'both']).optional(),
   isDemo: z.boolean().optional(),
+});
+
+export const appDataSchema = z.object({
+  babies: z.array(z.unknown()),
+  events: z.array(z.unknown()),
+  activeTimers: z.array(z.unknown()),
+  schemaVersion: z.number(),
 });
 
 export function validateBaby(b: unknown): Baby | null {

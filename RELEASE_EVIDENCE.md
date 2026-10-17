@@ -1,6 +1,59 @@
 # RELEASE_EVIDENCE.md
 
-Recorded: 2026-10-17 · PROMPT A vertical slice + preview diagnostic pass
+Recorded: 2026-10-17 · PROMPT A slice + Phase B (complete care logging)
+
+## Phase B verification evidence
+
+| Command | Result |
+| --- | --- |
+| `npx tsc --noEmit` (strict) | exit 0, no errors |
+| `npm test` (vitest) | exit 0 — **51/51 tests passed** (6 files) |
+| `npx expo export --platform web` | exit 0 — `dist/` produced; entry JS contains the new Phase B code (solids form, pump finish flow, repeat-last logic verified by string search in the bundle) |
+
+### Per-feature evidence (code + tests, no device run)
+
+- **Breastfeeding** — segment-based timers: side switching closes the running segment and
+  opens a new one (`switchSideFrom`, covered by 2 unit tests), last-side memory persisted
+  in `active_timers.lastSide` (SQLite migration v1→v2 backfills legacy rows), pause/resume
+  across segments tested. Manual correction via the "Manual" dock button (h/m inputs).
+  History: journal entries show side and duration; edit sheet allows side/duration/time fixes.
+- **Bottle feeding** — mL/oz toggle converts oz→mL at save (canonical mL, `ozToMl` unit
+  tested), live conversion line, breast milk/formula/mixed.
+- **Pumping** — dock timer + finish sheet that captures amount (mL, 0–2000), side, note;
+  `stopTimer` accepts extras so the timer duration is used with the captured amount; manual
+  PumpForm (validated); pump events now carry optional `side` (schema + zod tested).
+- **Sleep** — start/pause/resume/stop via segment timers (unit tested: paused math ignores
+  wall clock; resume opens a new segment); manual past-sleep entry (max 1440 min);
+  overnight span measured purely from timestamps (unit tested 23:00→07:00 = 480 min).
+- **Tummy time** — persistent stopwatch (segment timer survives restart via persisted
+  segments) + manual entry + history, unit-tested max 240 min.
+- **Solids** — food, quantity appended to description, reaction (liked/neutral/refused)
+  labelled "as observed, not a diagnosis", optional note; repeat-last prefills it.
+- **Restart/suspension safety** — timers restore from persisted `segments` JSON
+  (SQLite `loadAll` + legacy fallback tested in the v1→v2 migration block); elapsed always
+  derived from timestamps, never counters.
+- **Repeat last log** — `lastRepeatable` picks the newest non-note event (unit tested);
+  opens the matching form prefilled with all previous values and saves with a fresh timestamp.
+- **Editing** — every journal entry can now be edited including **time correction**
+  (date + hh:mm, validated: rejects malformed dates, future timestamps).
+- **Invalid-input guards** — zod rejects negative amounts/durations, absurd quantities,
+  inverted timer segments; `sanitizeSegments` drops NaN/inverted/future segments and always
+  leaves ≥1 (unit tested); forms enforce 0–2000 mL, 1–240/1440 min bounds.
+- **Baby isolation** — Today screen filters events and timers by `babyId === currentBaby.id`.
+- **Adapters** — SQLite (native) and IndexedDB (web) both persist `segments` + `lastSide`
+  with schemaVersion 2; the native v1→v2 migration preserves existing timers as a single
+  running segment.
+
+### Honest limitations of this pass
+
+- No rendered-browser or device run: UI journeys verified by code review + the static
+  bundle check described above, not by clicking through a live app in this environment.
+- Breast "both"-side summary is simplified to the currently-active side.
+- `npm run typecheck` and `npm test` were re-run after every failure until both were clean.
+
+---
+
+# Earlier: PROMPT A vertical slice (2026-10-17)
 
 ## Commands actually run (with exit codes)
 

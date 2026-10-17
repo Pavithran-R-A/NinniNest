@@ -49,7 +49,7 @@ export class IndexedDbCareRepository implements CareRepository {
   async loadAll(): Promise<AppData> {
     const db = this.assert();
     const data = await get<AppData>(db, 'appData');
-    return data ?? { babies: [], events: [], activeTimers: [], schemaVersion: 1 };
+    return data ?? { babies: [], events: [], activeTimers: [], schemaVersion: 2 };
   }
 
   private async saveAll(mutator: (data: AppData) => void): Promise<void> {

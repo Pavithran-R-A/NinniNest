@@ -61,6 +61,7 @@ export interface PumpEvent extends CareEventBase {
   type: 'pump';
   amountMl: number;
   durationMin: number;
+  side?: BreastSide;
 }
 
 export interface TummyTimeEvent extends CareEventBase {
@@ -83,12 +84,21 @@ export type CareEvent =
   | TummyTimeEvent
   | NoteEvent;
 
+export type TimerKind = 'feed_breast' | 'sleep' | 'tummy_time' | 'pump';
+
+export interface TimerSegment {
+  start: string; // ISO UTC
+  end: string | null; // null = currently running
+}
+
 export interface ActiveTimer {
   id: string;
   babyId: string;
-  kind: 'feed_breast' | 'sleep' | 'tummy_time' | 'pump';
-  startedAt: string; // ISO UTC
+  kind: TimerKind;
+  startedAt: string; // ISO UTC (first segment start)
   side?: BreastSide;
+  segments: TimerSegment[]; // completed + running segments
+  lastSide?: BreastSide; // last-used side memory for breastfeeding
   isDemo?: boolean;
 }
 
@@ -96,5 +106,5 @@ export interface AppData {
   babies: Baby[];
   events: CareEvent[];
   activeTimers: ActiveTimer[];
-  schemaVersion: 1;
+  schemaVersion: 2;
 }
