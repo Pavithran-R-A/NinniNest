@@ -1,6 +1,15 @@
 # FEATURE_STATUS.md
 
-Last updated: 2026-10-17 (P0 fix — Demo Mode data loss)
+Last updated: 2026-10-18 (Stage 1 — unified backup import validation)
+
+## Stage 1 — unified backup import validation (2026-10-18)
+| Aspect | Status |
+| --- | --- |
+| Single validated import path | DONE — Settings no longer runs its own `dryRunParse` flow; it now calls `planImport` (same validator the provider uses), so malformed records, duplicate event ids, orphaned references, unsupported backup versions and corrupted embedded photos are rejected before any write. |
+| Transactional apply | DONE — apply goes through `applyImportPlan` (single `replaceAll` write). Merge and replace modes preserved with explicit confirmation. |
+| Honest photo messaging | DONE — the import result reports restored photo *files* but never claims record re-linking; URI remap (`remapEmbeddedPhotos`) remains Stage 2. |
+| Regression coverage | DONE — `tests/importSafety.test.ts`: 9 tests proving every rejection path (newer version, malformed records, duplicate ids, orphans, corrupted photo hash, mid-write failure) leaves existing records byte-identical. |
+| Verification | `npm run typecheck` exit 0; `npx vitest run tests/importSafety.test.ts` 9/9; full suite **166/166, 13 files** (was 157). |
 
 ## Working (implemented and persisted)
 
