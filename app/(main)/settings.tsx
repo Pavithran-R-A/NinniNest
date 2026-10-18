@@ -14,11 +14,11 @@ import { useApp } from '@/src/state/AppProvider';
 import { PrimaryButton, Card, SegmentedControl } from '@/src/components/ui';
 import { useI18n } from '@/src/i18n/useI18n';
 import { LOCALES, type Locale } from '@/src/i18n/strings';
-import { buildBackup, dryRunParse, mergeData, type ImportMode, type BackupFile } from '@/src/models/backup';
+import { type ImportMode } from '@/src/models/backup';
+import { planImport, applyImportPlan, describeImportPlan } from '@/src/models/importPlan';
 import { buildFullBackup, restoreEmbeddedPhotos } from '@/src/models/mediaBackup';
 import { backupFileName, pickBackupFile, shareCsvBundle, shareTextFile } from '@/src/models/share';
 import { eventsToCsv, allCategoricalCsv } from '@/src/models/csv';
-import { localKeyOf } from '@/src/models/calendar';
 
 export default function SettingsScreen() {
   const t = useTheme();
@@ -43,7 +43,6 @@ export default function SettingsScreen() {
     const photoCount = backup.photosEmbedded.length;
     setMessage(result.ok ? `Backup saved with ${photoCount} photo${photoCount === 1 ? '' : 's'} included.` : result.message);
   };
-
   const doCsvExport = async () => {
     const files = [
       { name: 'care-history', content: eventsToCsv(data.events) },
@@ -53,11 +52,13 @@ export default function SettingsScreen() {
     setMessage(result.ok ? `CSV export ready (${files.length} files).` : result.message);
   };
 
-  // Full import flow: dry-run validate, then merge or replace, transactionally.
+  // Import flow: strict planImport validation, explicit confirmation, then a
+  // single transactional write via applyImportPlan. Embedded photo files are
+  // restored best-effort; URI re-linking onto records is the follow-up stage.
   const runImport = async (json: string) => {
-    const parsed = dryRunParse(json);
-    if (!parsed.dryRun.ok) {
-      const errors = parsed.dryRun.issues.filter((i) => i.severity === 'error');
+    const plan = planImport(json, data, importMode);
+    if (!plan.ok) {
+      const errors = plan.issues.filter((i) => i.severity === 'error');
       Alert.alert(
         'This backup cannot be imported',
         errors.map((e) => e.message).join('\n'),
@@ -65,33 +66,24 @@ export default function SettingsScreen() {
       );
       return;
     }
-    const c = parsed.dryRun.counts;
-    const summary = `${c.babies} profiles, ${c.events} events, ${c.growth} growth records, ${c.vaccinations} vaccinations, ${c.routines} routines.`;
-    const warnings = parsed.dryRun.issues.filter((i) => i.severity === 'warning');
+    const summary = describeImportPlan(plan);
+    const warnings = plan.issues.filter((i) => i.severity === 'warning');
     Alert.alert(
       'Review this import',
-      `${summary}${warnings.length ? '\n\n' + warnings.map((w) => w.message).join('\n') : ''}\n\nMode: ${importMode === 'merge' ? 'Merge — keep everything, add new records only' : 'Replace — erase current records first'}. Continue?`,
+      `${summary}.${warnings.length ? '\n\n' + warnings.map((w) => w.message).join('\n') : ''}\n\nMode: ${importMode === 'merge' ? 'Merge — keep everything, add new records only' : 'Replace — erase current records first'}. Continue?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Import',
           onPress: async () => {
             try {
-              // Transactional: build target, validate, then single replaceAll write.
-              const target =
-                importMode === 'replace'
-                  ? { ...parsed.backup.data, schemaVersion: 3 as const }
-                  : mergeData(data, parsed.backup.data);
-              if (target.babies.length === 0) {
-                setMessage('Nothing to import — no valid profiles in the file.');
-                return;
-              }
-              await repo.replaceAll(target);
-              const restored = await restoreEmbeddedPhotos(parsed.backup.photos ?? []);
+              const result = await applyImportPlan(repo, plan);
+              const restored = await restoreEmbeddedPhotos(plan.photos);
               await refresh();
               setMessage(
-                `${importMode === 'replace' ? 'Backup restored (replace)' : 'Backup merged into your journal'}.` +
-                (restored.size > 0 ? ` ${restored.size} photo(s) restored.` : '')
+                result.ok
+                  ? result.message + (restored.size > 0 ? ` ${restored.size} photo file(s) restored to the media library.` : ' No embedded photos in this backup.')
+                  : result.message
               );
             } catch {
               setMessage('Import failed before anything was written. Your existing records are untouched.');
