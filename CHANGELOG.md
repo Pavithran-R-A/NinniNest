@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## 0.6.1 — 2026-10-18 (Stage 1 — unified backup import validation)
+
+### Changed
+- Settings import now uses the strict `planImport` validator (the same path the
+  provider already used): malformed records, duplicate event ids, orphaned
+  references, unsupported backup versions and corrupted embedded photos are all
+  rejected before anything is written.
+- Import applies through `applyImportPlan` — one transactional write, no
+  hand-built merge/replace logic left in Settings. Merge and replace modes
+  preserved, each gated behind explicit user confirmation.
+- The import summary describes all record types and never claims photo re-linking
+  is complete: photo files restore best-effort; URI re-linking onto records is
+  the Stage 2 follow-up.
+
+### Test coverage
+- New suite `tests/importSafety.test.ts` (9 tests) proves every rejection path
+  leaves existing records byte-identical, including a simulated mid-write failure.
+- Full suite: 166/166 passing (13 files) · typecheck exit 0.
+
 ## 0.6.0 — 2026-10-17 (Phase F — consumer experience, i18n, identity)
 
 ### Added
