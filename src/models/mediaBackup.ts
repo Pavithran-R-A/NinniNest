@@ -3,7 +3,7 @@ import { File, Directory, Paths } from 'expo-file-system';
 import type { BackupFile, PhotoManifestEntry } from './backup';
 import { buildBackup } from './backup';
 import { hashContent } from './hash';
-import type { AppData } from './types';
+import type { AppData, MilestoneRecord } from './types';
 
 export { hashContent };
 
@@ -70,7 +70,8 @@ export async function buildFullBackup(data: AppData, settings?: { themeMode?: st
 }
 
 // Restores embedded photos into the managed media directory and returns a map
-// of recordId:field -> restored file URI. Failures per-file never abort the rest.
+// of recordId:field -> restored file URI. A payload whose hash does not match
+// its recorded sha256 is never written. Failures per-file never abort the rest.
 export async function restoreEmbeddedPhotos(
   photos: EmbeddedPhoto[]
 ): Promise<Map<string, string>> {
@@ -79,6 +80,7 @@ export async function restoreEmbeddedPhotos(
   const mediaRoot = new Directory(Paths.document, 'ninninest-media');
   for (const p of photos) {
     if (!p.base64) continue;
+    if (p.sha256 && hashContent(p.base64) !== p.sha256) continue; // corrupted payload — skip
     try {
       const dir = new Directory(mediaRoot, p.recordId);
       dir.create({ intermediates: true, idempotent: true });
@@ -87,11 +89,29 @@ export async function restoreEmbeddedPhotos(
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       await file.write(bytes);
-      if (hashContent(p.base64) !== p.sha256) continue; // corrupted payload — skip
       restored.set(`${p.recordId}:${p.field}`, file.uri);
     } catch {
       // skip individual photo failures
     }
   }
   return restored;
+}
+
+// Point records at the restored files. Only records that still have a photo
+// field (or had one before export) receive a URI, so restored media can never
+// attach to the wrong record.
+export function remapEmbeddedPhotos(
+  data: AppData,
+  milestones: MilestoneRecord[],
+  restored: Map<string, string>
+): { data: AppData; milestones: MilestoneRecord[] } {
+  const babies = data.babies.map((b) => {
+    const uri = restored.get(`${b.id}:babyPhoto`);
+    return uri ? { ...b, photoUri: uri } : b;
+  });
+  const remappedMilestones = milestones.map((m) => {
+    const uri = restored.get(`${m.id}:milestonePhoto`);
+    return uri ? { ...m, photoUri: uri } : m;
+  });
+  return { data: { ...data, babies }, milestones: remappedMilestones };
 }

@@ -6,6 +6,9 @@ import type { CareRepository } from './CareRepository';
 
 const DB_NAME = 'ninninest-web';
 const STORE = 'kv';
+const APP_KEY = 'appData';
+const DEMO_KEY = 'demoData';
+const DEMO_FLAG_KEY = 'demoActive';
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -57,7 +60,8 @@ export class IndexedDbCareRepository implements CareRepository {
 
   async loadAll(): Promise<AppData> {
     const db = this.assert();
-    const data = await get<Partial<AppData>>(db, 'appData');
+    const key = (await get<number>(db, DEMO_FLAG_KEY)) === 1 ? DEMO_KEY : APP_KEY;
+    const data = await get<Partial<AppData>>(db, key);
     if (!data) return { ...EMPTY_V3 };
     // v1/v2 web data (missing Phase C arrays) upgrades in place to v3.
     return {
@@ -78,7 +82,7 @@ export class IndexedDbCareRepository implements CareRepository {
     const db = this.assert();
     const data = await this.loadAll();
     mutator(data);
-    await put(db, 'appData', data);
+    await put(db, (await get<number>(db, DEMO_FLAG_KEY)) === 1 ? DEMO_KEY : APP_KEY, data);
   }
 
   private async upsert<T extends { id: string }>(
@@ -194,11 +198,20 @@ export class IndexedDbCareRepository implements CareRepository {
   }
 
   async replaceAll(data: AppData): Promise<void> {
-    await put(this.assert(), 'appData', {
+    const db = this.assert();
+    const demo = (await get<number>(db, DEMO_FLAG_KEY)) === 1;
+    await put(db, demo ? DEMO_KEY : APP_KEY, {
       ...EMPTY_V3,
       ...data,
       schemaVersion: 3,
     });
+  }
+
+  // Personal rows live under APP_KEY, demo rows under DEMO_KEY. Switching the
+  // flag swaps realms; the other realm's bytes are never read or written.
+  async setDemoMode(on: boolean): Promise<void> {
+    const db = this.assert();
+    await put(db, DEMO_FLAG_KEY, on ? 1 : 0);
   }
 
   async close(): Promise<void> {

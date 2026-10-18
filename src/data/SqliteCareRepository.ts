@@ -4,16 +4,28 @@ import type {
   MedicationRecord, MilestoneRecord, RoutineTemplate, VaccinationRecord,
 } from '../models/types';
 import type { CareRepository } from './CareRepository';
+import { missingColumns, type ColumnDef } from '../models/columns';
 
 const SCHEMA_VERSION = 3;
 
+const ACTIVE_TIMER_V2_COLUMNS: ColumnDef[] = [
+  { name: 'segments', ddl: "TEXT NOT NULL DEFAULT '[]'" },
+  { name: 'lastSide', ddl: 'TEXT' },
+];
+
 export class SqliteCareRepository implements CareRepository {
   private db: SQLite.SQLiteDatabase | null = null;
+  private demoMode = false;
 
   async init(): Promise<void> {
     this.db = await SQLite.openDatabaseAsync('ninninest.db');
-    await this.db.execAsync('PRAGMA journal_mode = WAL;');
-    await this.db.execAsync(`
+    await this.ensureSchema();
+  }
+
+  private async ensureSchema(): Promise<void> {
+    const db = this.db!;
+    await db.execAsync('PRAGMA journal_mode = WAL;');
+    await db.execAsync(`
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS babies (
         id TEXT PRIMARY KEY NOT NULL,
@@ -44,12 +56,12 @@ export class SqliteCareRepository implements CareRepository {
       );
     `);
     await this.ensurePhaseCTables();
-    const row = await this.db.getFirstAsync<{ value: string }>(
+    const row = await db.getFirstAsync<{ value: string }>(
       'SELECT value FROM meta WHERE key = ?',
       ['schema_version']
     );
     if (!row) {
-      await this.db.runAsync('INSERT INTO meta (key, value) VALUES (?, ?)', [
+      await db.runAsync('INSERT INTO meta (key, value) VALUES (?, ?)', [
         'schema_version',
         String(SCHEMA_VERSION),
       ]);
@@ -58,7 +70,7 @@ export class SqliteCareRepository implements CareRepository {
       if (from < 2) await this.migrateV1toV2();
       if (from < 3) await this.migrateV2toV3();
       if (from < SCHEMA_VERSION) {
-        await this.db.runAsync('UPDATE meta SET value = ? WHERE key = ?', [
+        await db.runAsync('UPDATE meta SET value = ? WHERE key = ?', [
           String(SCHEMA_VERSION),
           'schema_version',
         ]);
@@ -137,14 +149,20 @@ export class SqliteCareRepository implements CareRepository {
   }
 
   private async migrateV1toV2(): Promise<void> {
-    await this.db!.execAsync(`
-      ALTER TABLE active_timers ADD COLUMN segments TEXT NOT NULL DEFAULT '[]';
-      ALTER TABLE active_timers ADD COLUMN lastSide TEXT;
-    `);
-    const legacy = await this.db!.getAllAsync<{ id: string; startedAt: string }>(
-      'SELECT id, startedAt FROM active_timers'
+    // Column checks make this retry-safe: a migration interrupted after the
+    // first ALTER is completed correctly by a second pass, never throwing.
+    const timerCols = await this.db!.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(active_timers)'
+    );
+    const toAdd = missingColumns(timerCols.map((c) => c.name), ACTIVE_TIMER_V2_COLUMNS);
+    for (const def of toAdd) {
+      await this.db!.execAsync(`ALTER TABLE active_timers ADD COLUMN ${def.name} ${def.ddl};`);
+    }
+    const legacy = await this.db!.getAllAsync<{ id: string; startedAt: string; segments: string | null }>(
+      'SELECT id, startedAt, segments FROM active_timers'
     );
     for (const t of legacy) {
+      if (t.segments && t.segments !== '[]') continue; // already upgraded
       await this.db!.runAsync('UPDATE active_timers SET segments = ? WHERE id = ?', [
         JSON.stringify([{ start: t.startedAt, end: null }]),
         t.id,
@@ -508,5 +526,18 @@ export class SqliteCareRepository implements CareRepository {
   async close(): Promise<void> {
     await this.db?.closeAsync();
     this.db = null;
+  }
+
+  async setDemoMode(on: boolean): Promise<void> {
+    if (this.demoMode === on) return;
+    this.demoMode = on;
+    if (this.db) {
+      await this.db.closeAsync();
+      this.db = null;
+    }
+    // Separate database file per realm: personal rows in ninninest.db are
+    // physically unreachable while demo mode is active (ninninest-demo.db).
+    this.db = await SQLite.openDatabaseAsync(on ? 'ninninest-demo.db' : 'ninninest.db');
+    await this.ensureSchema();
   }
 }

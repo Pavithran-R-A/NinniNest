@@ -131,13 +131,14 @@ export default function SettingsScreen() {
 
   const confirmDemo = () => {
     if (isDemo) {
-      exitDemo();
-      setMessage('Demo ended. Your journal is empty and ready for real records.');
+      void exitDemo().then(() => {
+        setMessage('Demo ended. Your own records are back, exactly as you left them.');
+      });
       return;
     }
     Alert.alert(
       'Try demo mode?',
-      'Demo mode fills the app with clearly-labelled synthetic records. It never mixes with real data, and exiting removes it completely.',
+      'Demo mode fills the app with clearly-labelled synthetic records in a separate storage space. Your real data stays untouched, and exiting brings it back.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Start demo', onPress: async () => { await enterDemo(); setMessage('Demo mode is on. Records are marked as demo.'); } },

@@ -8,6 +8,9 @@ import type {
   MedicationRecord, MilestoneRecord, RoutineTemplate, VaccinationRecord,
 } from '@/src/models/types';
 import { buildDemoData, DEMO_BABY_ID_CONSTANT } from '@/src/models/demoData';
+import { commitTimerCompletion, type TimerExtras } from '@/src/models/timerCompletion';
+import { planImport, applyImportPlan, describeImportPlan, type ImportPlan } from '@/src/models/importPlan';
+import { remapEmbeddedPhotos, type EmbeddedPhoto } from '@/src/models/mediaBackup';
 import {
   validateEvent, validateBaby, validateTimer, validateGrowth, validateMilestone,
   validateMedication, validateMedicationAdministration, validateVaccination, validateRoutine,
@@ -28,6 +31,8 @@ type Status = 'loading' | 'ready' | 'error';
 const ACTIVE_BABY_KEY = 'ninninest.activeBabyId';
 const LOCALE_KEY = 'ninninest.locale';
 const CLOCK_KEY = 'ninninest.clockFormat';
+const THEME_KEY = 'ninninest.themeMode';
+const DEMO_FLAG_KEY = 'ninninest.demoActive';
 
 // In-flight write guards: prevent double-taps from creating duplicate records.
 const eventWrites = new Set<string>();
@@ -60,7 +65,7 @@ interface AppContextValue {
   updateTimer: (t: ActiveTimer) => Promise<boolean>;
   stopTimer: (
     timerId: string,
-    extras?: { durationMin?: number; amountMl?: number; side?: 'left' | 'right' | 'both'; note?: string }
+    extras?: TimerExtras
   ) => Promise<boolean>;
   pauseActiveTimer: (timerId: string) => Promise<boolean>;
   resumeActiveTimer: (timerId: string) => Promise<boolean>;
@@ -82,6 +87,8 @@ interface AppContextValue {
   resetPersonal: () => Promise<void>;
   importData: (json: string) => Promise<{ ok: boolean; message: string }>;
   exportJson: () => Promise<string>;
+  planPendingImport: (json: string, mode: 'replace' | 'merge') => ImportPlan;
+  applyPendingImport: (plan: ImportPlan) => Promise<{ ok: boolean; message: string }>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -104,6 +111,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [clockFormat, setClockFormatState] = useState<ClockFormat>('12h');
 
   const t = useMemo(() => makeT(locale), [locale]);
+
+  const setThemeModePersisted = useCallback((m: ThemeMode) => {
+    setThemeMode(m);
+    AsyncStorage.setItem(THEME_KEY, m).catch(() => {});
+  }, []);
 
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
@@ -166,6 +178,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled && (storedLocale === 'en' || storedLocale === 'ta')) setLocaleState(storedLocale);
         const storedClock = await AsyncStorage.getItem(CLOCK_KEY).catch(() => null);
         if (!cancelled && (storedClock === '12h' || storedClock === '24h')) setClockFormatState(storedClock);
+        const storedTheme = await AsyncStorage.getItem(THEME_KEY).catch(() => null);
+        if (!cancelled && (storedTheme === 'day' || storedTheme === 'night' || storedTheme === 'nightWarm')) {
+          setThemeMode(storedTheme);
+        }
+        // Restore demo mode across restarts BEFORE first load so the personal
+        // realm is never exposed (or mutated) while a demo session is active.
+        const storedDemo = await AsyncStorage.getItem(DEMO_FLAG_KEY).catch(() => null);
+        const demoActive = storedDemo === '1';
+        if (demoActive) await repo.setDemoMode(true);
+        if (!cancelled) setIsDemo(demoActive);
         await refresh();
         if (!cancelled) setStatus('ready');
       } catch (e) {
@@ -326,35 +348,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const stopTimer = useCallback(
     async (
       timerId: string,
-      extras?: { durationMin?: number; amountMl?: number; side?: 'left' | 'right' | 'both'; note?: string }
+      extras?: TimerExtras
     ) => {
       const timer = data.activeTimers.find((t) => t.id === timerId);
       if (!timer) return false;
       if (stoppingTimers.has(timerId)) return false; // double-tap guard
       stoppingTimers.add(timerId);
       try {
-        await repo.deleteTimer(timerId);
-        const minutes =
-          extras?.durationMin !== undefined
-            ? Math.round(extras.durationMin)
-            : Math.round(timerElapsedMinutes(timer));
-        const event = {
-          id: crypto.randomUUID(),
-          babyId: timer.babyId,
-          type: timer.kind,
-          timestamp: new Date().toISOString(),
-          durationMin: minutes,
-          ...(timer.kind === 'feed_breast'
-            ? { side: extras?.side ?? timer.side ?? timer.lastSide ?? 'both' }
-            : {}),
-          ...(timer.kind === 'pump'
-            ? { amountMl: Math.max(0, Math.round(extras?.amountMl ?? 0)), ...(extras?.side ? { side: extras.side } : {}) }
-            : {}),
-          ...(extras?.note?.trim() ? { note: extras.note.trim() } : {}),
-          ...(timer.isDemo ? { isDemo: true } : {}),
-        } as unknown as CareEvent;
-        if (!validateEvent(event)) return false;
-        await repo.addEvent(event);
+        // Commit-ordering invariant: the journal event is written first and the
+        // timer is removed only once the record is durably saved. If removing
+        // the timer fails, the event is rolled back so a retry cannot duplicate.
+        const result = await commitTimerCompletion(repo, timer, (e) => validateEvent(e) !== null, extras);
+        if (!result.ok) return false;
         await refresh();
         return true;
       } catch {
@@ -438,8 +443,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const enterDemo = useCallback(async () => {
     try {
+      // The adapter swaps storage realms; personal rows are never touched.
+      await repo.setDemoMode(true);
       await repo.replaceAll(buildDemoData());
       setIsDemo(true);
+      AsyncStorage.setItem(DEMO_FLAG_KEY, '1').catch(() => {});
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not start demo');
@@ -448,8 +456,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const exitDemo = useCallback(async () => {
     try {
-      await repo.replaceAll(EMPTY);
+      // Restore personal data BEFORE clearing the flag so a crash mid-exit
+      // leaves demo mode on (safe) rather than off with a wrecked realm.
+      await repo.setDemoMode(false);
       setIsDemo(false);
+      AsyncStorage.setItem(DEMO_FLAG_KEY, '0').catch(() => {});
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not exit demo');
@@ -468,40 +479,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [repo, refresh]);
 
-  const importData = useCallback(
-    async (json: string): Promise<{ ok: boolean; message: string }> => {
-      try {
-        const parsed = JSON.parse(json) as Partial<AppData>;
-        if (!parsed || !Array.isArray(parsed.babies) || !Array.isArray(parsed.events)) {
-          return { ok: false, message: 'This file does not look like a NinniNest backup.' };
-        }
-        const babies = parsed.babies.map(validateBaby).filter((b): b is Baby => b !== null);
-        const events = parsed.events.map(validateEvent).filter((e): e is CareEvent => e !== null);
-        if (babies.length === 0) {
-          return { ok: false, message: 'No valid baby profiles found in the file.' };
-        }
-        await repo.replaceAll({
-          babies,
-          events,
-          activeTimers: [],
-          growthRecords: (parsed.growthRecords ?? []).map(validateGrowth).filter((g): g is GrowthRecord => g !== null),
-          milestones: (parsed.milestones ?? []).map(validateMilestone).filter((m): m is MilestoneRecord => m !== null),
-          medications: (parsed.medications ?? []).map(validateMedication).filter((m): m is MedicationRecord => m !== null),
-          medicationAdministrations: (parsed.medicationAdministrations ?? [])
-            .map(validateMedicationAdministration)
-            .filter((a): a is MedicationAdministration => a !== null),
-          vaccinations: (parsed.vaccinations ?? []).map(validateVaccination).filter((v): v is VaccinationRecord => v !== null),
-          routines: (parsed.routines ?? []).map(validateRoutine).filter((r): r is RoutineTemplate => r !== null),
-          schemaVersion: 3,
-        });
-        setIsDemo(false);
-        await refresh();
-        return { ok: true, message: `Imported ${babies.length} profile and ${events.length} events.` };
-      } catch {
-        return { ok: false, message: 'The file could not be read.' };
+  const applyPendingImport = useCallback(
+    async (plan: ImportPlan): Promise<{ ok: boolean; message: string }> => {
+      if (!plan.ok || !plan.target) {
+        const firstError = plan.issues.find((i) => i.severity === 'error');
+        return { ok: false, message: firstError ? firstError.message : 'The backup could not be validated. Nothing was written.' };
       }
+      const result = await applyImportPlan(repo, plan);
+      if (!result.ok) return result;
+      setIsDemo(false);
+      AsyncStorage.setItem(DEMO_FLAG_KEY, '0').catch(() => {});
+      await refresh();
+      return result;
     },
     [repo, refresh]
+  );
+
+  const importData = useCallback(
+    async (json: string): Promise<{ ok: boolean; message: string }> => {
+      const plan = planImport(json, data, 'replace');
+      if (!plan.ok || !plan.target) {
+        const firstError = plan.issues.find((i) => i.severity === 'error');
+        return { ok: false, message: firstError ? firstError.message : 'The backup could not be validated. Nothing was written.' };
+      }
+      return applyPendingImport(plan);
+    },
+    [data, applyPendingImport]
+  );
+
+  const planPendingImport = useCallback(
+    (json: string, mode: 'replace' | 'merge') => planImport(json, data, mode),
+    [data]
   );
 
   const exportJson = useCallback(async () => {
@@ -512,7 +520,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     status, error, repo, data, isDemo, currentBaby,
     currentBabyId: currentBaby?.id ?? null,
     setActiveBaby,
-    themeMode, setThemeMode,
+    themeMode, setThemeMode: setThemeModePersisted,
     locale, setLocale, clockFormat, setClockFormat, t,
     refresh, addBaby, updateBaby, deleteBaby,
     addEvent, updateEvent, deleteEvent, addTimer, updateTimer, stopTimer,
@@ -530,6 +538,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addRoutine: routineCrud.addFn,
     deleteRoutine: routineCrud.deleteFn,
     enterDemo, exitDemo, resetPersonal, importData, exportJson,
+    planPendingImport, applyPendingImport,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

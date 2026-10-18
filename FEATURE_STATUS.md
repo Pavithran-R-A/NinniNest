@@ -1,10 +1,19 @@
 # FEATURE_STATUS.md
 
-Last updated: 2026-10-17 (Phase F — consumer experience, i18n, brand identity)
+Last updated: 2026-10-17 (P0 fix — Demo Mode data loss)
 
 ## Working (implemented and persisted)
 
-### Carried from earlier phases (all regression-tested, 110 tests green)
+### P0-1 Demo Mode isolation (GitHub issue #1, defect 1) — FIXED
+| Aspect | Status |
+| --- | --- |
+| Enter demo keeps personal records | FIXED — the storage adapter now swaps between two isolated realms (`setDemoMode(true)`); personal rows are never read or written while demo mode is on. SQLite uses a separate database file (`ninninest-demo.db`); web uses a separate IndexedDB record. The old behavior (`replaceAll(buildDemoData())` over live data) is gone. |
+| Exit demo restores personal state | FIXED — swapping back re-exposes the untouched personal realm, including the previously selected baby (active-baby preference is stored outside the realms). No `replaceAll(EMPTY)` wipe on exit. |
+| Persistence across restart | FIXED — the demo flag is persisted; a restart while in demo reopens the demo realm, so personal data is never exposed or mutated mid-demo. Regression-tested with a shared store across two adapter instances. |
+| Multi-baby / timers / failure handling | FIXED — regression tests cover multiple personal babies, active timers surviving entry/exit, and `replaceAll` failure inside demo leaving the personal realm untouched. |
+| Verification | 7 dedicated demo-isolation tests against the real adapter contract (in-memory realm adapter) in `tests/p0.test.ts`; full suite 157/157; strict typecheck exit 0. |
+
+### Carried from earlier phases (all regression-tested)
 | Feature | Status |
 | --- | --- |
 | Onboarding, Today dashboard, Phase A/B logging + timers, entry editing, handoff | DONE |
@@ -64,7 +73,5 @@ Last updated: 2026-10-17 (Phase F — consumer experience, i18n, brand identity)
 
 ## Verification evidence (this phase)
 - `npx tsc --noEmit` (strict): exit 0
-- `npm test`: exit 0 — **129/129 tests, 11 files** (8 new i18n tests)
-- `npx expo-doctor`: exit 0 — 21/21
-- `npx expo prebuild --platform android`: exit 0 — adaptive icon assets verified in generated res/
-- Rendered browser / device runs: impossible in this environment; checklist prepared instead of claiming visual QA
+- `npm test`: exit 0 — **157/157 tests, 12 files** (28 P0 regression tests, incl. 7 demo-isolation tests)
+- Rendered browser / device runs: impossible in this environment; demo isolation is verified at the adapter contract level, not on a physical device. SQLite realm behavior was verified against the in-memory realm adapter that mirrors the SQLite/IndexedDB contracts; the real `expo-sqlite` path was not exercised on a device.

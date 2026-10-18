@@ -29,4 +29,8 @@ export interface CareRepository {
   deleteRoutine(id: string): Promise<void>;
   replaceAll(data: AppData): Promise<void>;
   close(): Promise<void>;
+  // Demo isolation: swaps the adapter between personal storage and a separate
+  // demo storage realm. Personal rows must never be readable or writable while
+  // demo mode is active, and must survive entry, exit and restart untouched.
+  setDemoMode(on: boolean): Promise<void>;
 }
