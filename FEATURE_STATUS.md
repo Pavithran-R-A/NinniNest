@@ -1,6 +1,15 @@
 # FEATURE_STATUS.md
 
-Last updated: 2026-10-18 (Stage 1 — unified backup import validation)
+Last updated: 2026-10-18 (Stage 1 fix — media restore gated on successful import)
+
+## Stage 1 fix — media restore gated on successful import (2026-10-18)
+| Aspect | Status |
+| --- | --- |
+| Failed write stops workflow | DONE — the full import now runs through one workflow: database write first; media restoration and refresh run only on success. The actual failure is displayed. |
+| Honest messaging | DONE — failed imports no longer claim records were "untouched"; photo-restore results explicitly state re-linking to records is not included (Stage 2). |
+| Regression coverage | DONE — test proving that on a rejected write the media-restoration function is never invoked (and refresh is not called). |
+| Unchanged | Merge/replace confirmation, strict `planImport` validation, and Demo Mode isolation untouched. |
+| Verification | `npm run typecheck` exit 0; focused suites 38/38; full suite **167/167, 13 files**. |
 
 ## Stage 1 — unified backup import validation (2026-10-18)
 | Aspect | Status |

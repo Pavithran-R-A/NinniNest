@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 0.6.2 — 2026-10-18 (Stage 1 fix — media restore gated on successful import)
+
+### Fixed
+- A failed database import no longer proceeds to media restoration: the import
+  workflow stops immediately on write failure and shows the actual failure.
+- Failed-import messages no longer claim records were "untouched" — an
+  unverified claim — and now simply ask the user to try again.
+- Successful imports with embedded photos state explicitly that photo
+  re-linking to records is not part of this restore (Stage 2 work).
+
+### Test coverage
+- New regression test proves that when the repository rejects a write, the
+  media-restoration and refresh functions are never invoked.
+- Full suite: 167/167 passing (13 files) · strict typecheck exit 0.
+
 ## 0.6.1 — 2026-10-18 (Stage 1 — unified backup import validation)
 
 ### Changed

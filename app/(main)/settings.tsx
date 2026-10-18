@@ -15,7 +15,7 @@ import { PrimaryButton, Card, SegmentedControl } from '@/src/components/ui';
 import { useI18n } from '@/src/i18n/useI18n';
 import { LOCALES, type Locale } from '@/src/i18n/strings';
 import { type ImportMode } from '@/src/models/backup';
-import { planImport, applyImportPlan, describeImportPlan } from '@/src/models/importPlan';
+import { planImport, runBackupImport, describeImportPlan } from '@/src/models/importPlan';
 import { buildFullBackup, restoreEmbeddedPhotos } from '@/src/models/mediaBackup';
 import { backupFileName, pickBackupFile, shareCsvBundle, shareTextFile } from '@/src/models/share';
 import { eventsToCsv, allCategoricalCsv } from '@/src/models/csv';
@@ -77,16 +77,13 @@ export default function SettingsScreen() {
           text: 'Import',
           onPress: async () => {
             try {
-              const result = await applyImportPlan(repo, plan);
-              const restored = await restoreEmbeddedPhotos(plan.photos);
-              await refresh();
-              setMessage(
-                result.ok
-                  ? result.message + (restored.size > 0 ? ` ${restored.size} photo file(s) restored to the media library.` : ' No embedded photos in this backup.')
-                  : result.message
-              );
+              const result = await runBackupImport(repo, plan, {
+                restorePhotos: restoreEmbeddedPhotos,
+                refresh,
+              });
+              setMessage(result);
             } catch {
-              setMessage('Import failed before anything was written. Your existing records are untouched.');
+              setMessage('The import failed while writing. Please try again.');
             }
           },
         },

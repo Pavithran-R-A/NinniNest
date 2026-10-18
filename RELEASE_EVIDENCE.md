@@ -1,6 +1,40 @@
 # RELEASE_EVIDENCE.md
 
-Recorded: 2026-10-18 · Stage 1 (unified backup import validation) · prior: 2026-10-17 PROMPT A + Phases B/C/D/E/F + P0 Demo Mode fix
+Recorded: 2026-10-18 · Stage 1 fix (media restore gated on successful import) · prior: Stage 1 import validation, 2026-10-17 PROMPT A + Phases B/C/D/E/F + P0 Demo Mode fix
+
+## Stage 1 fix — media restoration guard (this run)
+
+### Defect
+`app/(main)/settings.tsx` called `restoreEmbeddedPhotos(plan.photos)` unconditionally
+after `applyImportPlan`, so a failed database write still triggered media restoration
+and a UI refresh. Two failed-import messages also claimed records were "untouched" —
+a claim the code could not verify.
+
+### Changed files
+| File | Change |
+| --- | --- |
+| `src/models/importPlan.ts` | Added `runBackupImport` workflow: database write first; photo restore + refresh run only if the write succeeded. Failed-import message no longer claims records were untouched. Success message states photo re-linking is not part of the restore. |
+| `app/(main)/settings.tsx` | Import button now delegates to `runBackupImport`; removed the unconditional `restoreEmbeddedPhotos` call and the unverified catch-block claim. |
+| `tests/importSafety.test.ts` | New regression test: with a rejected write, the media-restoration and refresh spies are never invoked; message reports the write failure. Updated the mid-write assertion to the new wording. |
+| `tests/p0.test.ts` | Updated one assertion pinned to the old "untouched" wording. |
+| `CHANGELOG.md`, `FEATURE_STATUS.md`, `RELEASE_EVIDENCE.md` | Release notes (0.6.2), status and this evidence updated. |
+
+### Verification (actual results)
+| Check | Command | Exit code | Result |
+| --- | --- | --- | --- |
+| Strict TypeScript | `npm run typecheck` | 0 | clean |
+| Focused tests | `npx vitest run tests/importSafety.test.ts tests/p0.test.ts` | 0 | **38/38 passed** |
+| Full test suite | `npm test` | 0 | **167/167 passed, 13 files** |
+| Device run | — | — | **NOT RUN — no device/emulator in this environment** |
+
+### Honest scope statement
+- Media restoration is now correctly gated, but **photo relinking is still not
+  implemented** (Stage 2): restored files land in the media directory, and records
+  are not pointed at them; the UI says so explicitly on success.
+- No git repository or GitHub remote exists in this environment (working directory
+  is not a git repo), so no commit SHA can be produced here. This matches the
+  Phase E disclosure; the change is delivered as file evidence in this repo
+  snapshot for the owner to synchronize to Pavithran-R-A/NinniNest.
 
 ## Stage 1 — backup import validation repair (this run)
 

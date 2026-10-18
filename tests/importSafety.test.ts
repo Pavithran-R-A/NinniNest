@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { planImport, applyImportPlan } from '../src/models/importPlan';
+import { describe, it, expect, vi } from 'vitest';
+import { planImport, applyImportPlan, runBackupImport } from '../src/models/importPlan';
 import { buildBackup, BACKUP_VERSION, emptyData } from '../src/models/backup';
 import { hashContent } from '../src/models/hash';
 import { MemoryCareRepository } from '../src/data/MemoryCareRepository';
@@ -137,8 +137,22 @@ describe('Stage 1 import safety: malformed imports never modify existing records
     repo.failNextReplace = true;
     const result = await applyImportPlan(repo, plan);
     expect(result.ok).toBe(false);
-    expect(result.message).toContain('untouched');
+    expect(result.message).toContain('failed while writing');
     expect(snapshot(repo)).toBe(before);
+  });
+
+  it('a rejected database write never invokes media restoration', async () => {
+    const repo = new MemoryCareRepository();
+    await repo.init();
+    const plan = planImport(backupJson(), currentData(), 'replace');
+    expect(plan.ok).toBe(true);
+    const restorePhotos = vi.fn(async () => new Map<string, string>());
+    const refresh = vi.fn(async () => {});
+    repo.failNextReplace = true;
+    const message = await runBackupImport(repo, plan, { restorePhotos, refresh });
+    expect(message).toContain('failed while writing');
+    expect(restorePhotos).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it('replace mode erases pre-existing records only on success', async () => {

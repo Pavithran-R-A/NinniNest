@@ -291,7 +291,7 @@ describe('P0-4/P0-5 import rejection and atomicity', () => {
     const plan = planImport(JSON.stringify(goodBackup([baby({ id: B2 })], [event({ id: E9, babyId: B2 })])), personal, 'replace');
     const result = await applyImportPlan(repo, plan);
     expect(result.ok).toBe(false);
-    expect(result.message).toMatch(/untouched/i);
+    expect(result.message).toMatch(/failed while writing/i);
     expect(await repo.loadAll().then((d) => d.babies.map((b) => b.id))).toEqual([B1]);
   });
 

@@ -260,9 +260,33 @@ export async function applyImportPlan(
   } catch {
     return {
       ok: false,
-      message: 'The import failed while writing. Your existing records are untouched — please try again.',
+      message: 'The import failed while writing. Please try again.',
     };
   }
+}
+
+export interface BackupImportDeps {
+  restorePhotos: (photos: EmbeddedPhoto[]) => Promise<Map<string, string>>;
+  refresh: () => Promise<void>;
+}
+
+// Full import workflow: database write first; media restoration runs only if
+// the write succeeded. The returned string is the user-facing result message.
+export async function runBackupImport(
+  repo: { replaceAll(data: AppData): Promise<void> },
+  plan: ImportPlan,
+  deps: BackupImportDeps
+): Promise<string> {
+  const result = await applyImportPlan(repo, plan);
+  if (!result.ok) return result.message;
+  const restored = await deps.restorePhotos(plan.photos);
+  await deps.refresh();
+  return (
+    result.message +
+    (restored.size > 0
+      ? ` ${restored.size} photo file(s) restored to the media library. Photo re-linking to records is not part of this restore.`
+      : ' No embedded photos in this backup.')
+  );
 }
 
 export async function applyImportPlanOrFail(
