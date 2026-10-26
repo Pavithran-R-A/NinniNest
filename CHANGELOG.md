@@ -1,5 +1,73 @@
 # CHANGELOG
 
+## 0.7.0 — 2026-10-26 (Stage 2 — staged, crash-recoverable backup restore; genuine SHA-256)
+
+### Fixed
+- Backup import is now staged and crash-recoverable. Embedded photos are
+  decoded, integrity-verified, quarantined under the managed media area and
+  promoted into their final per-baby locations **before** the single
+  transactional database write. A failure at any point — unwritable media
+  directory, simulated storage failure, rejected database write — leaves the
+  previous records and previously existing photos byte-identical, and removes
+  only the files the failed import created.
+- Restored photos are now **re-linked to their records** (baby and milestone
+  `photoUri` fields point at the restored managed files). The old "re-linking
+  is not part of this restore" limitation is gone.
+- Milestone photos are restored under the owning baby's managed directory, so
+  the existing per-baby orphan cleanup covers them (they previously landed in
+  a per-milestone directory the cleanup never swept).
+- Interrupted imports recover: staging debris is swept at the next launch and
+  before every import; promoted-but-uncommitted files are unique-named orphans
+  that per-baby cleanup reclaims. No committed state is ever inconsistent.
+- Records-only or partial backups no longer leave dangling photo references:
+  records new to the device have foreign `photoUri` values cleared, with the
+  loss stated in the result message. Existing records in merge mode are never
+  rewritten.
+
+### Changed
+- Backup format **v5**: every embedded photo carries `hashAlgo: 'sha256'` plus
+  a genuine FIPS 180-4 SHA-256 hex digest of the **decoded original bytes**
+  (dependency-free implementation, cross-checked against Node's crypto in
+  tests) and the decoded byte count. The `bytes` field no longer reports the
+  base64 length.
+- Legacy v4 (and older) archives still import: their checksums are verified
+  with the original noncryptographic algorithm, explicitly labelled
+  `legacy-fnv`, and are **never** reinterpreted as SHA-256. A v4 file whose
+  checksum only matches as SHA-256 is correctly rejected.
+- Strict photo-manifest validation at plan time: entries referencing records
+  not in the file, duplicate entries for the same record/field, and
+  traversal-style or unsafe file names are hard errors; the media port also
+  sanitizes to a bare file name as defense in depth.
+- Exports report completeness: `buildFullBackupWithReport` lists every
+  referenced photo that could not be read, writes `mediaComplete: false` plus
+  the missing-photo manifest, and the Settings message states the backup is
+  incomplete instead of claiming success.
+- Settings import/export messages distinguish complete success, incomplete
+  media, records-only imports, storage failure (nothing written), and
+  rollback (previous data preserved) — in English and Tamil.
+
+### Housekeeping (environment recovery)
+- `vitest.config.ts` resolves test stubs with `fileURLToPath` (the previous
+  `URL.pathname` alias broke all stubbed suites on Windows) and pins the test
+  timezone to UTC so analytics day-window tests are machine-independent.
+- `expo-image-picker` pinned back to the SDK 57 line (`~57.0.20`); the
+  `^58.0.10` requirement broke Android gradle autolinking.
+- Unused `@supabase/supabase-js` dependency removed (no source imports; the
+  app is and stays local-first).
+- GitHub Actions CI added (typecheck + unit tests + web export).
+
+### Test coverage
+- New suite `tests/backupRestore.test.ts` (21 tests) covers the staged
+  workflow end to end against an in-memory media port: fresh-device photo
+  restore with URI re-linking, unwritable media, mid-stage and mid-promote
+  failures, database-failure rollback that preserves pre-existing media,
+  interrupted-import recovery, merge-vs-replace photo semantics, identical
+  file names across babies, duplicate/invalid/traversal manifest entries,
+  legacy v4 checksum semantics, repeated imports, and SHA-256 vectors
+  cross-checked against Node crypto.
+- Full suite: **188/188 passing (14 files)** · strict typecheck exit 0 ·
+  web export exit 0.
+
 ## 0.6.2 — 2026-10-18 (Stage 1 fix — media restore gated on successful import)
 
 ### Fixed

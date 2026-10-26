@@ -1,6 +1,21 @@
 # FEATURE_STATUS.md
 
-Last updated: 2026-10-18 (Stage 1 fix — media restore gated on successful import)
+Last updated: 2026-10-26 (Stage 2 — staged, crash-recoverable backup restore; genuine SHA-256)
+
+## Stage 2 — safe media-inclusive backup restore (2026-10-26)
+| Aspect | Status |
+| --- | --- |
+| Staged restore ordering | DONE — embedded photos are integrity-verified, quarantined under the managed media area's `.staging` directory, and promoted into final per-baby locations BEFORE the single transactional `replaceAll` database commit. |
+| Failure rollback | DONE — unwritable media, mid-stage/mid-promote failures, and rejected database writes all leave previous records and previously existing photos byte-identical; only files the failed import created are removed. |
+| Photo re-linking | DONE — restored files are mapped back onto baby/milestone `photoUri` fields at import time; the Stage 1 "re-linking not included" limitation is closed. |
+| Crash recovery | DONE — staging debris is swept at launch (`AppProvider` init) and before every import; promoted-but-uncommitted files are unique-named orphans reclaimed by per-baby cleanup. File/DB operations are documented as NOT one atomic transaction by design. |
+| Genuine SHA-256 | DONE — v5 backups embed `hashAlgo: 'sha256'` + FIPS 180-4 digest of decoded original bytes (dependency-free implementation, cross-checked against Node crypto in tests); `bytes` is the decoded byte count. |
+| Legacy v4 compatibility | DONE — v4-and-older checksums verified with the original noncryptographic algorithm (`legacy-fnv`), never reinterpreted; a v4 file whose checksum matches only as SHA-256 is rejected. |
+| Manifest validation | DONE — orphan manifest refs, duplicate refs, and traversal-style file names are hard errors at plan time; ports sanitize to bare file names as defense in depth. |
+| Export completeness | DONE — `buildFullBackupWithReport` records unreadable photos in `mediaComplete: false` + `missingPhotos`; the export message states incompleteness instead of claiming success. |
+| Records-only honesty | DONE — imports without media clear dangling foreign photo references on records new to the device and say so; merge mode never rewrites existing records. |
+| Messaging | DONE — Settings distinguishes complete / incomplete-photos / records-only / storage-failed (nothing written) / rolled-back outcomes in English and Tamil. |
+| Verification | `npm run typecheck` exit 0; full suite **188/188, 14 files** (21 new in `tests/backupRestore.test.ts`); `npx expo export --platform web` exit 0. |
 
 ## Stage 1 fix — media restore gated on successful import (2026-10-18)
 | Aspect | Status |

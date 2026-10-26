@@ -15,8 +15,9 @@ import { PrimaryButton, Card, SegmentedControl } from '@/src/components/ui';
 import { useI18n } from '@/src/i18n/useI18n';
 import { LOCALES, type Locale } from '@/src/i18n/strings';
 import { type ImportMode } from '@/src/models/backup';
-import { planImport, runBackupImport, describeImportPlan } from '@/src/models/importPlan';
-import { buildFullBackup, restoreEmbeddedPhotos } from '@/src/models/mediaBackup';
+import { planImport, describeImportPlan } from '@/src/models/importPlan';
+import { runStagedBackupImport } from '@/src/models/backupRestore';
+import { buildFullBackupWithReport, createMediaPort } from '@/src/models/mediaBackup';
 import { backupFileName, pickBackupFile, shareCsvBundle, shareTextFile } from '@/src/models/share';
 import { eventsToCsv, allCategoricalCsv } from '@/src/models/csv';
 
@@ -35,13 +36,24 @@ export default function SettingsScreen() {
   const personalCount = data.events.filter((e) => !e.isDemo).length;
 
   const doExport = async () => {
-    // Full backup: records + settings + embedded photo bytes. A records-only
-    // JSON file is not a complete backup.
-    const backup = await buildFullBackup(data, { themeMode });
+    // Full backup: records + settings + embedded photo bytes. Photos that
+    // cannot be read are reported, never silently omitted — the message says
+    // plainly when a backup is incomplete.
+    const { backup, missingPhotos } = await buildFullBackupWithReport(data, { themeMode });
     const json = JSON.stringify(backup);
     const result = await shareTextFile(backupFileName(new Date().toISOString()), json, 'application/json');
+    if (!result.ok) {
+      setMessage(result.message);
+      return;
+    }
     const photoCount = backup.photosEmbedded.length;
-    setMessage(result.ok ? `Backup saved with ${photoCount} photo${photoCount === 1 ? '' : 's'} included.` : result.message);
+    setMessage(
+      missingPhotos.length > 0
+        ? tr('settings.exportIncomplete', { n: missingPhotos.length })
+        : photoCount > 0
+          ? tr('settings.exportComplete', { n: photoCount })
+          : tr('settings.exportCompleteNoPhotos')
+    );
   };
   const doCsvExport = async () => {
     const files = [
@@ -52,9 +64,10 @@ export default function SettingsScreen() {
     setMessage(result.ok ? `CSV export ready (${files.length} files).` : result.message);
   };
 
-  // Import flow: strict planImport validation, explicit confirmation, then a
-  // single transactional write via applyImportPlan. Embedded photo files are
-  // restored best-effort; URI re-linking onto records is the follow-up stage.
+  // Import flow: strict planImport validation, explicit confirmation, then the
+  // staged restore — photos are verified, quarantined and promoted BEFORE the
+  // single transactional database write; a failure anywhere rolls back to the
+  // previous records and media with nothing partial left behind.
   const runImport = async (json: string) => {
     const plan = planImport(json, data, importMode);
     if (!plan.ok) {
@@ -77,13 +90,27 @@ export default function SettingsScreen() {
           text: 'Import',
           onPress: async () => {
             try {
-              const result = await runBackupImport(repo, plan, {
-                restorePhotos: restoreEmbeddedPhotos,
+              const result = await runStagedBackupImport(repo, plan, {
+                media: createMediaPort(),
                 refresh,
+                current: data,
               });
-              setMessage(result);
+              const modeLabel = tr(importMode === 'merge' ? 'settings.importModeMerge' : 'settings.importModeReplace');
+              if (result.outcome === 'complete') {
+                setMessage(tr('settings.importComplete', { mode: modeLabel, summary, n: result.restoredPhotos }));
+              } else if (result.outcome === 'incomplete-photos') {
+                setMessage(tr('settings.importIncomplete', { mode: modeLabel, summary, n: result.failedPhotos }));
+              } else if (result.outcome === 'records-only') {
+                setMessage(tr('settings.importRecordsOnly', { mode: modeLabel, summary }));
+              } else if (result.outcome === 'storage-failed') {
+                setMessage(tr('settings.importStorageFailed'));
+              } else if (result.outcome === 'rolled-back') {
+                setMessage(tr('settings.importRolledBack'));
+              } else {
+                setMessage(tr('settings.importValidationFailed'));
+              }
             } catch {
-              setMessage('The import failed while writing. Please try again.');
+              setMessage(tr('settings.importStorageFailed'));
             }
           },
         },

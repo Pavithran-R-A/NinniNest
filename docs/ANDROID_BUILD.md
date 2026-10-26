@@ -5,6 +5,23 @@ returned "Not logged in"). All build configuration is prepared and verified loca
 (`expo prebuild` for Android succeeded, exit 0; expo-doctor 21/21). The owner must run the
 actual build after exporting the project.
 
+## 2026-10-26 local build attempt (owner machine, Windows)
+
+Two failures, both now understood:
+
+1. **Autolinking failure** (`Field 'version' is required ... Publication`):
+   `expo-image-picker@^58.0.10` (SDK 58 line) sat in an SDK 57 project. **Fixed in
+   source**: pinned to `~57.0.20` per `node_modules/expo/bundledNativeModules.json`.
+   After the fix, gradle configuration and autolinking completed cleanly.
+2. **Disk exhaustion**: the machine had <3 GB free when Gradle started downloading
+   NDK 27.1 (~2.5 GB extracted) even though NDK 27.2 was already installed. The
+   partially downloaded `ndk/27.1.12297006` stub was removed and `android/app/build.gradle`
+   was pointed at the installed `27.2.12479018`, but the drive filled before the build
+   could finish. **Free at least ~6 GB before retrying.** Note `android/` is generated
+   by prebuild and intentionally not committed; regenerate with
+   `npx expo prebuild --platform android --no-install --clean` and re-apply the NDK
+   override if the RN default is again unavailable.
+
 ## Prerequisites
 
 1. Node.js 20 or newer and npm.

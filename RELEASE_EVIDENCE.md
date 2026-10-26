@@ -1,8 +1,87 @@
 # RELEASE_EVIDENCE.md
 
-Recorded: 2026-10-18 · Stage 1 fix (media restore gated on successful import) · prior: Stage 1 import validation, 2026-10-17 PROMPT A + Phases B/C/D/E/F + P0 Demo Mode fix
+Recorded: 2026-10-26 · Stage 2 (staged backup restore + genuine SHA-256) · prior: Stage 1 fix (2026-10-18), Stage 1 import validation, PROMPT A + Phases B/C/D/E/F + P0 Demo Mode fix
 
-## Stage 1 fix — media restoration guard (this run)
+## Stage 2 — staged, crash-recoverable backup restore (this run)
+
+Environment: recovery session on the owner's Windows machine (ZCode, GLM-5.3-Flash
+via zai-start-plan). The repository was cloned fresh from
+`https://github.com/Pavithran-R-A/NinniNest.git` at the independently verified
+`main` HEAD `4902b47e482523dbd7e2b1e5116fb381eb691df3`; all work below was
+committed on the dedicated branch
+`release/ninninest-safety-zcode-20261026` (base = that SHA) and pushed with the
+remote commit SHA verified afterwards. No force push; `main` untouched.
+
+### Defects closed (GitHub issue #1 Stage 2 residuals)
+1. `runBackupImport` committed the database BEFORE restoring media → replaced by
+   `runStagedBackupImport` (new `src/models/backupRestore.ts`): verify → stage →
+   promote → single transactional DB commit → cleanup.
+2. Photo URI mappings never applied back to records → restored files are now
+   re-linked onto baby/milestone `photoUri` fields; milestone photos land in the
+   owning baby's managed directory (per-baby orphan cleanup scope).
+3. Individual photo failures silently skipped → every payload is verified and
+   staged before any write; a failure aborts the whole import with nothing
+   written, and the UI distinguishes storage-failure from rollback.
+4. `sha256` metadata was a noncryptographic FNV-style checksum of the base64
+   TEXT → v5 backups carry `hashAlgo: 'sha256'` with a genuine SHA-256 of the
+   decoded original bytes (pure-TS FIPS 180-4, cross-checked against Node
+   `node:crypto` in tests). v4 archives verify under explicit `legacy-fnv`
+   semantics and are never reinterpreted.
+5. Export could silently omit unreadable media → `buildFullBackupWithReport`
+   returns per-photo missing references, writes `mediaComplete: false` +
+   `missingPhotos` into the JSON, and the Settings message declares the backup
+   incomplete.
+
+### Changed files
+| File | Change |
+| --- | --- |
+| `src/models/hash.ts` | Added dependency-free `sha256Hex` (FIPS 180-4) + base64 codecs; `hashContent` documented as the legacy checksum kept only for v4 verification. |
+| `src/models/backup.ts` | `BACKUP_VERSION` 4 → 5; `hashAlgo`/decoded `bytes` on photo entries; `mediaComplete` + `missingPhotos` on the backup envelope. |
+| `src/models/mediaBackup.ts` | `buildFullBackupWithReport` (completeness report, injectable reader for tests); `MediaPort` contract + native expo-file-system port (quarantine `.staging`, promote into per-baby dirs, rollback only created files, `isManagedUri`) + web no-op port; v5 exports use genuine SHA-256; legacy restore helpers marked deprecated. |
+| `src/models/importPlan.ts` | Versioned hash verification (`sha256` vs `legacy-fnv`); hard errors for orphan/duplicate/unsafe manifest entries; warnings for media-incomplete backups and records-only dangling references; `runBackupImport` kept as the deprecated records-only path. |
+| `src/models/backupRestore.ts` | NEW: staged workflow (`runStagedBackupImport`) + `sweepImportStaging` launch recovery; documented crash semantics (staging wiped, promoted orphans reclaimed by per-baby cleanup; DB and files are explicitly NOT one atomic transaction). |
+| `app/(main)/settings.tsx` | Export uses the completeness report; import runs the staged workflow with the native media port and maps outcomes to honest localized messages (complete / incomplete / records-only / storage-failed / rolled-back). |
+| `src/state/AppProvider.tsx` | Launch-time staging sweep on native. |
+| `src/i18n/strings.ts` | 9 new Settings message keys in English and Tamil. |
+| `tests/backupRestore.test.ts` | NEW: 21 regression tests covering the 16 milestone scenarios (fresh-device restore + re-linking, URI remap ownership, export missing-photo report, corrupted bytes, SHA-256 vectors + tamper rejection, unwritable dir, staged/promote failure, DB-failure rollback preserving pre-existing media, cleanup scope, interrupted-import recovery, merge vs replace, identical names across babies, duplicate/invalid refs, traversal names, legacy v4 semantics, repeated imports). |
+| `tests/p0.test.ts` | Two photo fixtures now include the milestone record they reference (orphan manifest entries are hard errors as of this stage). |
+| `vitest.config.ts` | `fileURLToPath` alias resolution (Windows fix) + `TZ: UTC` pin for deterministic day-window tests. |
+| `package.json` / lockfile | `expo-image-picker` `^58.0.10` → `~57.0.20` (SDK 57 alignment; `^58` broke Android gradle autolinking with `Field 'version' is required ... Publication`); removed unused `@supabase/supabase-js`. |
+| `.github/workflows/ci.yml` | NEW: typecheck + unit tests + web export on push/PR. |
+| `FEATURE_STATUS.md`, `CHANGELOG.md`, `KNOWN_LIMITATIONS.md`, `DEVICE_TEST_MATRIX.md`, `docs/ANDROID_BUILD.md` | Status, notes and honest environment records updated. |
+
+### Verification (actual results, this machine)
+| Check | Command | Exit code | Result |
+| --- | --- | --- | --- |
+| Strict TypeScript | `npm run typecheck` | 0 | clean |
+| Full test suite | `npm test` | 0 | **188/188 passed, 14 files** (was 167/167 — 21 new) |
+| Focused new suite | `npx vitest run tests/backupRestore.test.ts` | 0 | 21/21 (confirmed failing before implementation) |
+| Web export | `npx expo export --platform web` | 0 | dist/ regenerated |
+| Remote parity (pre-work) | `git ls-remote origin refs/heads/main` | 0 | `4902b47e…` matched local HEAD exactly |
+| Remote parity (post-push) | `git ls-remote origin refs/heads/release/ninninest-safety-zcode-20261026` | 0 | see commit note below — verified equal to local push |
+| Android APK | `gradlew assembleRelease` | 1 | **NOT PRODUCED.** First failure: SDK-58 `expo-image-picker` broke autolinking (fixed in source). Second attempt aborted: gradle tried to download NDK 27.1 (~2.5 GB) while the drive had <3 GB free; project pointed at installed NDK 27.2, but disk headroom ran out before completion. Build steps and cleanup recorded in `docs/ANDROID_BUILD.md`. |
+| Device/emulator run | — | — | **NOT RUN.** An emulator was booted for visual QA but the milestone pivoted to the backup-safety P0; visual QA remains on the device matrix. |
+
+### Honest scope statement
+- The media side of the workflow is exercised through an in-memory `MediaPort`
+  in tests; the native `expo-file-system` port follows the exact same contract
+  but **has not executed against a real device filesystem yet**. Real-SQLite +
+  real-filesystem restore, permission denial and low-storage behaviour remain
+  in `docs/DEVICE_TEST_MATRIX.md` as NOT TESTED.
+- DB + file operations are documented as NOT a single atomic transaction (they
+  cannot be); recovery is staged: pre-commit aborts leave old state untouched,
+  post-commit crash leaves reclaimable orphans, staging sweeps at launch.
+- Expo SQLite audit: `replaceAll` runs inside `withTransactionAsync` (single
+  serialized connection, WAL). The import is the only writer while its modal
+  confirmation is open, so a deferred transaction is sufficient; no exclusive
+  transaction was added.
+- `commitTimerCompletion` was audited, not changed: event-first, timer-second,
+  compensating rollback — already regression-tested (P0-2).
+- Known follow-up from issue #1 (not this milestone): native Copy in
+  `handoff.tsx` uses the removed `react-native` Clipboard API and should move
+  to `expo-clipboard` after the P0 safety items.
+
+## Stage 1 fix — media restoration guard (2026-10-18)
 
 ### Defect
 `app/(main)/settings.tsx` called `restoreEmbeddedPhotos(plan.photos)` unconditionally

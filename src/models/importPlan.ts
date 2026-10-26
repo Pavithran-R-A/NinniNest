@@ -5,7 +5,7 @@ import {
 } from './validation';
 import { BACKUP_VERSION, emptyData, mergeData, type BackupFile, type ImportMode } from './backup';
 import type { EmbeddedPhoto } from './mediaBackup';
-import { hashContent } from './hash';
+import { base64ToBytes, hashContent, sha256Hex } from './hash';
 
 export interface ImportIssue {
   severity: 'error' | 'warning';
@@ -159,29 +159,83 @@ export function planImport(json: string, current: AppData, mode: ImportMode): Im
     });
   }
 
-  // Photos: verify integrity of every embedded payload at plan time.
-  // Legacy v3 archives put embedded media in `photos`; current exports use
-  // photosEmbedded. planImport reads both so older backups still restore fully.
+  // Photos: verify every embedded payload against the integrity metadata its
+  // own backup version promises, and require every manifest entry to reference
+  // a real record under a safe file name. Nothing here writes.
+  //   - v5 (hashAlgo 'sha256'): genuine SHA-256 of the decoded original bytes.
+  //   - v4 and older (no hashAlgo): the legacy noncryptographic checksum over
+  //     the base64 text. Its meaning is NEVER reinterpreted as a SHA-256.
   const embeddedRaw = Array.isArray(obj.photosEmbedded) ? (obj.photosEmbedded as EmbeddedPhoto[]) : [];
   const legacyRaw = Array.isArray(obj.photos) ? (obj.photos as EmbeddedPhoto[]) : [];
   const rawPhotos: EmbeddedPhoto[] = embeddedRaw.length > 0
     ? embeddedRaw
     : legacyRaw.filter((p) => p && typeof p.base64 === 'string');
+
+  const validMilestonesForRefs = milestones.filter((m): m is NonNullable<typeof m> => m !== null);
+  const babyIdsForRefs = new Set(validBabies.map((b) => b.id));
+  const milestoneIdsForRefs = new Set(validMilestonesForRefs.map((m) => m.id));
+
   const photos: EmbeddedPhoto[] = [];
+  const seenPhotoKeys = new Set<string>();
   let corruptPhotos = 0;
   let missingBytes = 0;
+  let invalidRefs = 0;
+  let duplicateRefs = 0;
+  let unsafeNames = 0;
   for (const p of rawPhotos) {
     if (!p || typeof p !== 'object' || !p.recordId || !p.field) continue;
+    const refOk =
+      (p.field === 'babyPhoto' && babyIdsForRefs.has(p.recordId)) ||
+      (p.field === 'milestonePhoto' && milestoneIdsForRefs.has(p.recordId));
+    if (!refOk) {
+      invalidRefs += 1;
+      continue;
+    }
+    const key = `${p.recordId}:${p.field}`;
+    if (seenPhotoKeys.has(key)) {
+      duplicateRefs += 1;
+      continue;
+    }
+    seenPhotoKeys.add(key);
+    if (
+      typeof p.fileName !== 'string' || !p.fileName.trim() ||
+      p.fileName.includes('/') || p.fileName.includes('\\') || p.fileName.includes('..')
+    ) {
+      unsafeNames += 1;
+      continue;
+    }
     if (!p.base64) {
       missingBytes += 1;
       photos.push(p);
       continue;
     }
-    if (p.sha256 && hashContent(p.base64) !== p.sha256) {
+    const algo = p.hashAlgo ?? 'legacy-fnv';
+    const digestMatches = algo === 'sha256'
+      ? sha256Hex(base64ToBytes(p.base64)) === p.sha256
+      : hashContent(p.base64) === p.sha256;
+    if (p.sha256 && !digestMatches) {
       corruptPhotos += 1;
       continue;
     }
     photos.push(p);
+  }
+  if (invalidRefs) {
+    issues.push({
+      severity: 'error',
+      message: `${invalidRefs} embedded photo(s) reference records that are not in this backup. The import was stopped rather than attach media to the wrong record.`,
+    });
+  }
+  if (duplicateRefs) {
+    issues.push({
+      severity: 'error',
+      message: `${duplicateRefs} duplicate embedded photo entr${duplicateRefs === 1 ? 'y' : 'ies'} in the file. The import was stopped — conflicting media metadata cannot be applied safely.`,
+    });
+  }
+  if (unsafeNames) {
+    issues.push({
+      severity: 'error',
+      message: `${unsafeNames} embedded photo(s) have unsafe file names. The import was stopped rather than write outside the app's media area.`,
+    });
   }
   if (corruptPhotos) {
     issues.push({
@@ -193,6 +247,28 @@ export function planImport(json: string, current: AppData, mode: ImportMode): Im
     issues.push({
       severity: 'warning',
       message: `${missingBytes} photo(s) have no embedded data (this backup was made without media). They will be skipped.`,
+    });
+  }
+  if (obj.mediaComplete === false) {
+    const missingCount = Array.isArray(obj.missingPhotos) ? obj.missingPhotos.length : 0;
+    issues.push({
+      severity: 'warning',
+      message: `This backup is incomplete: ${missingCount} photo file(s) could not be read when it was exported.`,
+    });
+  }
+  // Records that reference photos absent from the manifest (records-only or
+  // partial backups). They import fine, but the images themselves are not in
+  // the file — say so instead of leaving dangling references unexplained.
+  const embeddedKeysWithBytes = new Set(
+    photos.filter((p) => p.base64).map((p) => `${p.recordId}:${p.field}`)
+  );
+  const danglingPhotoRecords =
+    validBabies.filter((b) => b.photoUri && !embeddedKeysWithBytes.has(`${b.id}:babyPhoto`)).length +
+    validMilestonesForRefs.filter((m) => m.photoUri && !embeddedKeysWithBytes.has(`${m.id}:milestonePhoto`)).length;
+  if (danglingPhotoRecords) {
+    issues.push({
+      severity: 'warning',
+      message: `${danglingPhotoRecords} record(s) reference photos that are not embedded in this file. They will import without those photos.`,
     });
   }
 

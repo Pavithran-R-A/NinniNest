@@ -4,7 +4,11 @@ import {
   validateMedication, validateMedicationAdministration, validateVaccination, validateRoutine,
 } from './validation';
 
-export const BACKUP_VERSION = 4;
+// v5: photo integrity metadata is versioned. v4 (and older) archives carry a
+// legacy noncryptographic checksum in `sha256`; v5 archives carry a genuine
+// SHA-256 of the decoded original bytes plus hashAlgo: 'sha256'. Importers
+// never reinterpret one as the other — see planImport's photo verification.
+export const BACKUP_VERSION = 5;
 
 export interface PhotoManifestEntry {
   recordId: string;
@@ -18,6 +22,21 @@ export interface EmbeddedPhotoData {
   fileName: string;
   base64?: string;
   sha256?: string;
+  /**
+   * Which verifier `sha256` must be checked against. Absent (v4 and older)
+   * means the legacy noncryptographic checksum over the base64 text; 'sha256'
+   * (v5) means a genuine SHA-256 hex digest of the decoded original bytes.
+   */
+  hashAlgo?: 'sha256' | 'legacy-fnv';
+  /** v5: byte length of the DECODED original file. */
+  bytes?: number;
+}
+
+/** Referenced media that could not be read at export time (incomplete backup). */
+export interface MissingPhotoRef {
+  recordId: string;
+  field: 'babyPhoto' | 'milestonePhoto';
+  fileName?: string;
 }
 
 export interface BackupFile {
@@ -27,6 +46,9 @@ export interface BackupFile {
   data: AppData;
   photos: EmbeddedPhotoData[]; // manifest; base64 bytes present when media-inclusive
   settings?: { themeMode?: string };
+  /** v5: false when referenced media could not all be read at export time. */
+  mediaComplete?: boolean;
+  missingPhotos?: MissingPhotoRef[];
 }
 
 export interface DryRunIssue {

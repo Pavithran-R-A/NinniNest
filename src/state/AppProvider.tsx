@@ -10,7 +10,8 @@ import type {
 import { buildDemoData, DEMO_BABY_ID_CONSTANT } from '@/src/models/demoData';
 import { commitTimerCompletion, type TimerExtras } from '@/src/models/timerCompletion';
 import { planImport, applyImportPlan, describeImportPlan, type ImportPlan } from '@/src/models/importPlan';
-import { remapEmbeddedPhotos, type EmbeddedPhoto } from '@/src/models/mediaBackup';
+import { remapEmbeddedPhotos, createMediaPort, type EmbeddedPhoto } from '@/src/models/mediaBackup';
+import { sweepImportStaging } from '@/src/models/backupRestore';
 import {
   validateEvent, validateBaby, validateTimer, validateGrowth, validateMilestone,
   validateMedication, validateMedicationAdministration, validateVaccination, validateRoutine,
@@ -172,6 +173,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         await repo.init();
+        // Crash recovery: staging debris from an interrupted backup import is
+        // never referenced by committed state, so it is always safe to sweep
+        // at launch (native only; web has no managed media area).
+        if (Platform.OS !== 'web') {
+          await sweepImportStaging(createMediaPort());
+        }
         const stored = await AsyncStorage.getItem(ACTIVE_BABY_KEY).catch(() => null);
         if (!cancelled && stored) setActiveBabyIdState(stored);
         const storedLocale = await AsyncStorage.getItem(LOCALE_KEY).catch(() => null);

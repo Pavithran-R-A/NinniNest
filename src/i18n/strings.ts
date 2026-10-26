@@ -142,6 +142,19 @@ const en: Dict = {
   'settings.importModeHint':
     'Merge adds new records and keeps everything you have. Replace erases current records first. Either way the file is fully checked before anything changes.',
   'settings.erase': 'Erase all data',
+  'settings.exportComplete': 'Backup saved. Every referenced photo is embedded ({n} total).',
+  'settings.exportCompleteNoPhotos': 'Backup saved. No photos needed embedding.',
+  'settings.exportIncomplete':
+    'Backup saved, but it is INCOMPLETE: {n} referenced photo(s) could not be read and are missing from the file.',
+  'settings.importComplete': 'Backup restored ({mode}): {summary}. {n} photo(s) re-linked to their records.',
+  'settings.importIncomplete':
+    'Backup restored ({mode}): {summary}. {n} photo reference(s) could not be restored and were cleared.',
+  'settings.importRecordsOnly': 'Backup restored ({mode}): {summary}. This file contained no embedded photos.',
+  'settings.importStorageFailed':
+    'The import stopped before anything was written: a photo file could not be prepared. Your records and photos are unchanged.',
+  'settings.importRolledBack':
+    'The import failed while writing and was rolled back — your previous records and photos are unchanged. Please try again.',
+  'settings.importValidationFailed': 'The backup could not be validated; nothing was written.',
   'settings.tryDemo': 'Try demo mode',
   'settings.exitDemo': 'Exit demo mode',
   'settings.about':
@@ -260,6 +273,19 @@ const ta: Dict = {
   'settings.importModeHint':
     'இணைப்பு புதிய பதிவுகளைச் சேர்க்கும், ஏற்கனவே உள்ளவை அப்படியே இருக்கும். மாற்று முதலில் தற்போதைய பதிவுகளை அழிக்கும். எந்த முறையிலும் கோப்பு முழுமையாகச் சரிபார்க்கப்பட்ட பிறகே மாற்றங்கள் நடக்கும்.',
   'settings.erase': 'அனைத்தையும் அழி',
+  'settings.exportComplete': 'காப்பகம் சேமிக்கப்பட்டது. குறிப்பிட்ட அனைத்து புகைப்படங்களும் சேர்க்கப்பட்டுள்ளன (மொத்தம் {n}).',
+  'settings.exportCompleteNoPhotos': 'காப்பகம் சேமிக்கப்பட்டது. சேர்க்க வேண்டிய புகைப்படங்கள் இல்லை.',
+  'settings.exportIncomplete':
+    'காப்பகம் சேமிக்கப்பட்டது, ஆனால் அது முழுமையற்றது: {n} புகைப்படம்(கள்) படிக்க முடியாமல் கோப்பில் இல்லை.',
+  'settings.importComplete': 'காப்பகம் மீட்டமைக்கப்பட்டது ({mode}): {summary}. {n} புகைப்படம்(கள்) பதிவுகளுடன் இணைக்கப்பட்டன.',
+  'settings.importIncomplete':
+    'காப்பகம் மீட்டமைக்கப்பட்டது ({mode}): {summary}. {n} புகைப்பட இணைப்பு(கள்) மீட்க முடியாமல் நீக்கப்பட்டன.',
+  'settings.importRecordsOnly': 'காப்பகம் மீட்டமைக்கப்பட்டது ({mode}): {summary}. இந்தக் கோப்பில் புகைப்படங்கள் இல்லை.',
+  'settings.importStorageFailed':
+    'எதுவும் எழுதப்படுவதற்கு முன்பே இறக்குமதி நிறுத்தப்பட்டது: ஒரு புகைப்படக் கோப்பைத் தயாரிக்க முடியவில்லை. உங்கள் பதிவுகளும் புகைப்படங்களும் அப்படியே உள்ளன.',
+  'settings.importRolledBack':
+    'எழுதும் போது இறக்குமதி தோல்வியடைந்தது, திரும்பப் பெறப்பட்டது — உங்கள் முந்தைய பதிவுகளும் புகைப்படங்களும் அப்படியே உள்ளன. மீண்டும் முயற்சிக்கவும்.',
+  'settings.importValidationFailed': 'காப்பகத்தைச் சரிபார்க்க முடியவில்லை; எதுவும் எழுதப்படவில்லை.',
   'settings.tryDemo': 'மாதிரி முறையை முயற்சி',
   'settings.exitDemo': 'மாதிரி முறையை விட்டு வெளியேறு',
   'settings.about':

@@ -22,8 +22,12 @@ Read `docs/01_PROJECT_KNOWLEDGE.md` first. Key operational rules:
 11. Never claim device behaviour that was only verified in the browser preview.
 12. Photos on native must be copied into `Documents/ninninest-media/<babyId>/` via
    `src/models/media.ts`; never store raw picker URIs. Cleanup is scoped per baby.
-13. Backups are versioned (`src/models/backup.ts`, v4). Imports must dry-run validate
-   first and use merge or a single transactional replace — never partial writes.
+13. Backups are versioned (`src/models/backup.ts`, v5: photos carry `hashAlgo`
+    + genuine SHA-256 of decoded bytes; v4-and-older keep `legacy-fnv`
+    verification — never reinterpret old checksums). Imports must dry-run
+    validate first and go through the staged restore
+    (`src/models/backupRestore.ts`: stage media → transactional DB write →
+    cleanup; rollback only newly created files) — never partial writes.
 14. Dates must pass `isCalendarValid` (`src/models/calendar.ts`) — shape alone is not
    enough. Analytics live in `src/models/analytics.ts` and must stay deterministic.
 15. Routine reminders (`src/models/notifications.ts`) are informational only and must
