@@ -33,3 +33,7 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# local security-tool state and QA binary artifacts
+.mimosa/
+qa/apk/
