@@ -13,6 +13,7 @@ import { planImport, applyImportPlan, describeImportPlan, type ImportPlan } from
 import { remapEmbeddedPhotos, createMediaPort, type EmbeddedPhoto } from '@/src/models/mediaBackup';
 import { sweepImportStaging } from '@/src/models/backupRestore';
 import { deleteBabyMediaDir, deletePhotoIfInManagedDir } from '@/src/models/media';
+import { syncRoutineNotifications } from '@/src/models/notifications';
 import {
   validateEvent, validateBaby, validateTimer, validateGrowth, validateMilestone,
   validateMedication, validateMedicationAdministration, validateVaccination, validateRoutine,
@@ -169,6 +170,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [repo]);
 
+  // Routine reminders are informational only. Resync from the persisted
+  // routine list after every routine change and on app start; never scheduled
+  // from the demo realm (demo routines are synthetic). A failed resync must
+  // never block the mutation or the app start that caused it.
+  const resyncRoutineReminders = useCallback(async () => {
+    if (isDemo) return;
+    try {
+      const loaded = await repo.loadAll();
+      await syncRoutineNotifications(loaded.routines.filter((r) => !r.isDemo));
+    } catch {
+      // informational: skip silently
+    }
+  }, [repo, isDemo]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -197,6 +212,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (demoActive) await repo.setDemoMode(true);
         if (!cancelled) setIsDemo(demoActive);
         await refresh();
+        if (!demoActive && !cancelled) void resyncRoutineReminders();
         if (!cancelled) setStatus('ready');
       } catch (e) {
         if (!cancelled) {
@@ -209,7 +225,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       repo.close().catch(() => {});
     };
-  }, [repo, refresh]);
+  }, [repo, refresh, resyncRoutineReminders]);
 
   const persistEvent = useCallback(
     async (event: CareEvent, mode: 'add' | 'update'): Promise<boolean> => {
@@ -450,6 +466,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (id) => repo.deleteRoutine(id)
   );
 
+  const addRoutine = useCallback(
+    async (r: RoutineTemplate) => {
+      const ok = await routineCrud.addFn(r);
+      if (ok) await resyncRoutineReminders();
+      return ok;
+    },
+    [routineCrud.addFn, resyncRoutineReminders]
+  );
+  const deleteRoutine = useCallback(
+    async (id: string) => {
+      const ok = await routineCrud.deleteFn(id);
+      if (ok) await resyncRoutineReminders();
+      return ok;
+    },
+    [routineCrud.deleteFn, resyncRoutineReminders]
+  );
+
   const currentBaby = useMemo(() => {
     if (isDemo) return data.babies.find((b) => b.id === DEMO_BABY_ID_CONSTANT) ?? null;
     const candidates = data.babies.filter((b) => !b.isDemo);
@@ -557,8 +590,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteMedicationAdministration: administrationCrud.deleteFn,
     addVaccination: vaccinationCrud.addFn,
     deleteVaccination: vaccinationCrud.deleteFn,
-    addRoutine: routineCrud.addFn,
-    deleteRoutine: routineCrud.deleteFn,
+    addRoutine,
+    deleteRoutine,
     enterDemo, exitDemo, resetPersonal, importData, exportJson,
     planPendingImport, applyPendingImport,
   };

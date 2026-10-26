@@ -11,6 +11,7 @@ export default defineConfig({
       // yields "/C:/..." there, which never resolves).
       'react-native': fileURLToPath(new URL('./tests/stubs/reactNative.ts', import.meta.url)),
       'expo-file-system': fileURLToPath(new URL('./tests/stubs/expoFileSystem.ts', import.meta.url)),
+      'expo-notifications': fileURLToPath(new URL('./tests/stubs/expoNotifications.ts', import.meta.url)),
     },
   },
   test: {

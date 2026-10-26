@@ -8,7 +8,40 @@ export interface ScheduleOutcome {
   permissionDenied: boolean;
 }
 
-const WEEKDAY_IDS: (number | null)[] = [];
+export const ROUTINE_CHANNEL_ID = 'routine-reminders';
+
+export interface PlannedTrigger {
+  identifier: string;
+  weekday: number; // 1..7, Sunday = 1 (expo-notifications convention)
+  hour: number;
+  minute: number;
+}
+
+/**
+ * Pure scheduling plan: which weekly triggers the routine set should produce.
+ * `days` use 0=Sunday..6=Saturday (Date.getDay convention, see routines.ts);
+ * expo weekday is 1=Sunday, hence +1. Inactive routines and unparsable
+ * times produce nothing. Keeping this pure makes the weekday/time mapping
+ * unit-testable without the native notifications module.
+ */
+export function planRoutineTriggers(routines: RoutineTemplate[]): PlannedTrigger[] {
+  const plan: PlannedTrigger[] = [];
+  for (const routine of routines) {
+    if (!routine.active) continue;
+    const [h, m] = routine.timeOfDay.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) continue;
+    for (let day = 0; day < 7; day++) {
+      if (!routine.days.includes(day)) continue;
+      plan.push({
+        identifier: `routine-${routine.id}-${day}`,
+        weekday: day + 1,
+        hour: h,
+        minute: m,
+      });
+    }
+  }
+  return plan;
+}
 
 async function ensurePermission(): Promise<boolean> {
   if (Platform.OS === 'web') return false;
@@ -21,16 +54,12 @@ async function ensurePermission(): Promise<boolean> {
   return false;
 }
 
-function triggerFor(routine: RoutineTemplate, dayOffset: number): Notifications.WeeklyTriggerInput | null {
-  if (!routine.days.includes(dayOffset % 7)) return null;
-  const [h, m] = routine.timeOfDay.split(':').map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  return {
-    type: 'weekly',
-    weekday: (dayOffset % 7) + 1, // expo-notifications uses 1..7 (Sunday=1)
-    hour: h,
-    minute: m,
-  } as Notifications.WeeklyTriggerInput;
+async function ensureAndroidChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync(ROUTINE_CHANNEL_ID, {
+    name: 'Routine reminders',
+    importance: Notifications.AndroidImportance.DEFAULT,
+  }).catch(() => {});
 }
 
 // Schedules weekly local notifications for every active routine. Reminders are
@@ -57,29 +86,30 @@ export async function syncRoutineNotifications(
     }
   }
 
-  for (const routine of routines) {
-    if (!routine.active) continue;
-    let scheduledAny = false;
-    for (let day = 0; day < 7; day++) {
-      const trigger = triggerFor(routine, day);
-      if (!trigger) continue;
-      try {
-        await Notifications.scheduleNotificationAsync({
-          identifier: `routine-${routine.id}-${day}`,
-          content: {
-            title: routine.title,
-            body: 'Scheduled reminder from NinniNest. Log it in the journal if it happened.',
-            sound: false,
-          },
-          trigger,
-        });
-        scheduledAny = true;
-        outcome.scheduled += 1;
-      } catch {
-        // individual trigger failure must not abort the rest
-      }
+  await ensureAndroidChannel();
+
+  const plan = planRoutineTriggers(routines);
+  for (const trigger of plan) {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: trigger.identifier,
+        content: {
+          title: 'NinniNest routine',
+          body: 'Scheduled reminder. Log it in the journal if it happened.',
+          sound: false,
+          ...(Platform.OS === 'android' ? { channelId: ROUTINE_CHANNEL_ID } : {}),
+        },
+        trigger: {
+          type: 'weekly',
+          weekday: trigger.weekday,
+          hour: trigger.hour,
+          minute: trigger.minute,
+        } as Notifications.WeeklyTriggerInput,
+      });
+      outcome.scheduled += 1;
+    } catch {
+      // individual trigger failure must not abort the rest
     }
-    if (!scheduledAny) outcome.skipped.push(`${routine.title}: nothing to schedule`);
   }
   return outcome;
 }
@@ -100,4 +130,3 @@ export async function countScheduledRoutineNotifications(): Promise<number> {
   return existing.filter((n) => n.identifier.startsWith('routine-')).length;
 }
 
-export { WEEKDAY_IDS };
