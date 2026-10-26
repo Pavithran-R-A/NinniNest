@@ -1,6 +1,5 @@
 import React, { useRef, useState } from 'react';
 import {
-  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -8,14 +7,17 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 import { useTheme } from '@/src/design/ThemeProvider';
 import { fontNames, radius, spacing } from '@/src/design/tokens';
 import { useApp } from '@/src/state/AppProvider';
 import { PrimaryButton, Card, SegmentedControl } from '@/src/components/ui';
 import { useI18n } from '@/src/i18n/useI18n';
 import { LOCALES, type Locale } from '@/src/i18n/strings';
+import { BRAND } from '@/src/i18n/brand';
 import { type ImportMode } from '@/src/models/backup';
 import { planImport, describeImportPlan } from '@/src/models/importPlan';
+import { confirmDialog } from '@/src/models/confirm';
 import { runStagedBackupImport } from '@/src/models/backupRestore';
 import { buildFullBackupWithReport, createMediaPort } from '@/src/models/mediaBackup';
 import { backupFileName, pickBackupFile, shareCsvBundle, shareTextFile } from '@/src/models/share';
@@ -72,16 +74,14 @@ export default function SettingsScreen() {
     const plan = planImport(json, data, importMode);
     if (!plan.ok) {
       const errors = plan.issues.filter((i) => i.severity === 'error');
-      Alert.alert(
-        'This backup cannot be imported',
-        errors.map((e) => e.message).join('\n'),
-        [{ text: 'OK' }]
-      );
+      confirmDialog('This backup cannot be imported', errors.map((e) => e.message).join('\n'), [
+        { text: 'OK' },
+      ]);
       return;
     }
     const summary = describeImportPlan(plan);
     const warnings = plan.issues.filter((i) => i.severity === 'warning');
-    Alert.alert(
+    confirmDialog(
       'Review this import',
       `${summary}.${warnings.length ? '\n\n' + warnings.map((w) => w.message).join('\n') : ''}\n\nMode: ${importMode === 'merge' ? 'Merge — keep everything, add new records only' : 'Replace — erase current records first'}. Continue?`,
       [
@@ -139,7 +139,7 @@ export default function SettingsScreen() {
   };
 
   const confirmErase = () => {
-    Alert.alert(
+    confirmDialog(
       'Erase all data?',
       'This permanently deletes every baby profile and care record on this device. It cannot be undone.',
       [
@@ -163,7 +163,7 @@ export default function SettingsScreen() {
       });
       return;
     }
-    Alert.alert(
+    confirmDialog(
       'Try demo mode?',
       'Demo mode fills the app with clearly-labelled synthetic records in a separate storage space. Your real data stays untouched, and exiting brings it back.',
       [
@@ -317,7 +317,9 @@ export default function SettingsScreen() {
               NinniNest is a local-first care journal. Core tracking, history, export and erase
               are free forever. There is no account, no advertising and no hidden subscription.
             </Text>
-            <Text style={[styles.aboutVersion, { color: t.inkFaint }]}>Version 0.4.0 · Phase D</Text>
+            <Text style={[styles.aboutVersion, { color: t.inkFaint }]}>
+              Version {Constants.expoConfig?.version ?? '1.0.0'} · {BRAND.name}
+            </Text>
           </Card>
         </Section>
       </ScrollView>

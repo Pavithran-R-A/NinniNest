@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -36,6 +35,7 @@ import { EmptyState } from '@/src/components/ui';
 import {
   BabyForm, GrowthForm, MilestoneForm, MedicationForm, VaccinationForm, RoutineForm,
 } from '@/src/screens/FamilyForms';
+import { confirmDialog } from '@/src/models/confirm';
 import { persistRecordWithPhoto, type PhotoWorkflowIo } from '@/src/models/photoPersist';
 import { importPhoto, deletePhotoIfInManagedDir } from '@/src/models/media';
 import { useI18n } from '@/src/i18n/useI18n';
@@ -123,7 +123,7 @@ export default function FamilyScreen() {
   const showBabyPicker = tab !== 'profiles';
 
   const confirmDeleteBaby = (baby: Baby) => {
-    Alert.alert(
+    confirmDialog(
       'Delete this profile?',
       `${baby.name} and every recorded event, timer, measurement, milestone, medication and vaccination for them will be permanently erased.`,
       [
@@ -131,14 +131,14 @@ export default function FamilyScreen() {
         {
           text: 'Delete profile',
           style: 'destructive',
-          onPress: () => deleteBaby(baby.id),
+          onPress: () => void deleteBaby(baby.id),
         },
       ]
     );
   };
 
   const confirmDelete = (what: string, run: () => void) => {
-    Alert.alert(`Remove this ${what}?`, 'This cannot be undone.', [
+    confirmDialog(`Remove this ${what}?`, 'This cannot be undone.', [
       { text: 'Keep it', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: run },
     ]);

@@ -5,22 +5,34 @@ returned "Not logged in"). All build configuration is prepared and verified loca
 (`expo prebuild` for Android succeeded, exit 0; expo-doctor 21/21). The owner must run the
 actual build after exporting the project.
 
-## 2026-10-26 local build attempt (owner machine, Windows)
+## 2026-10-26 local build attempts (final status: config CORRECT, disk-blocked)
 
-Two failures, both now understood:
+Three `./gradlew assembleRelease` attempts, three distinct causes — all fixed in
+configuration except the last:
 
 1. **Autolinking failure** (`Field 'version' is required ... Publication`):
-   `expo-image-picker@^58.0.10` (SDK 58 line) sat in an SDK 57 project. **Fixed in
-   source**: pinned to `~57.0.20` per `node_modules/expo/bundledNativeModules.json`.
-   After the fix, gradle configuration and autolinking completed cleanly.
-2. **Disk exhaustion**: the machine had <3 GB free when Gradle started downloading
-   NDK 27.1 (~2.5 GB extracted) even though NDK 27.2 was already installed. The
-   partially downloaded `ndk/27.1.12297006` stub was removed and `android/app/build.gradle`
-   was pointed at the installed `27.2.12479018`, but the drive filled before the build
-   could finish. **Free at least ~6 GB before retrying.** Note `android/` is generated
-   by prebuild and intentionally not committed; regenerate with
-   `npx expo prebuild --platform android --no-install --clean` and re-apply the NDK
-   override if the RN default is again unavailable.
+   SDK-58 `expo-image-picker` in an SDK 57 project. **Fixed in source**
+   (`~57.0.20`).
+2. **NDK mismatch for library modules**: `react-native-worklets` reads
+   `rootProject.ext.ndkVersion` (RN default 27.1) while only 27.2 is installed;
+   a partial 27.1 download stub also had to be removed. **Fixed**: the version
+   is now overridden at the ROOT `android/build.gradle`
+   (`rootProject.ext.ndkVersion = "27.2.12479018"`) in addition to the
+   app-module override — the configuration phase completes cleanly.
+3. **Disk exhaustion**: the drive hit 0 bytes during dependency transforms.
+   The build needs ≥6 GB free over the ~2 GB of cached dependencies
+   (`~/.gradle/caches/modules-2` is kept and reused). **This is the only
+   remaining blocker.**
+
+Ready-to-run (after freeing ≥6 GB):
+
+```bash
+npx expo prebuild --platform android --no-install --clean   # regenerates android/
+# re-apply the two ndkVersion overrides (see git history of docs/ANDROID_BUILD.md)
+cd android && JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot" \
+  ANDROID_HOME="C:\Users\<you>\AppData\Local\Android\Sdk" ./gradlew assembleRelease
+# APK at android/app/build/outputs/apk/release/app-release.apk
+```
 
 ## Prerequisites
 

@@ -1,5 +1,56 @@
 # CHANGELOG
 
+## 0.8.0 — 2026-10-26 (final completion mission — product gaps closed)
+
+### Added
+- **Photo picker, wired end to end** (the photo pipeline previously had no UI
+  producer): baby create/edit and milestone create offer select, preview,
+  replace and remove via `expo-image-picker`. Durability ordering is a tested
+  pure workflow (`persistRecordWithPhoto`, 11 tests): copy into
+  `Documents/ninninest-media/<babyId>/` BEFORE persisting; delete the previous
+  photo only AFTER a successful commit; on copy or database failure remove
+  only files the operation created. Photo controls are disabled in demo mode;
+  permission/cancel/error states are localized (en + ta).
+- **Routine reminders, wired** (previously never scheduled despite being
+  claimed done): scheduling decisions extracted into a pure
+  `planRoutineTriggers()` (4 tests — day→weekday mapping, unique ids, bad-time
+  skipping); dedicated Android notification channel; provider reschedules from
+  persisted routines after every routine add/delete and on app start; demo
+  mode never seeds device notifications; reminders remain informational only.
+- **Real-adapter IndexedDB integration tests** (6, via dev-only
+  `fake-indexeddb`): round-trip, restart durability with a fresh adapter over
+  the same store, atomic timer completion, physically isolated demo realm
+  swap, merge import, failed-write survival.
+- **Backup size envelope measured** with ~192 KB synthetic photos: 0 → 0.00
+  MB, 1 → 0.25 MB, 20 → 5.01 MB, 100 → 25.04 MB of JSON (linear); records-only
+  stays under 200 KB for 50 babies. Previously unmeasured.
+
+### Fixed
+- **Web confirmations existed as dead code**: `confirmDialog` (a real
+  `window.confirm` fallback for `Alert.alert`, which is a no-op on web) had
+  zero callers — destructive deletes and imports in Settings and Family
+  silently proceeded without confirmation in the browser. All destructive
+  flows now use it.
+- **Handoff Copy** called the removed `react-native` Clipboard API (guaranteed
+  device crash); now `expo-clipboard` `setStringAsync`.
+- **CSV bundle sharing** passed a directory URI to Android's share sheet
+  (unsupported); new dependency-free stored-zip writer (`src/models/zip.ts`,
+  4 tests incl. CRC-32 check vector) bundles the CSVs into one `application/zip`
+  file.
+- Settings About showed a hardcoded stale version; it now reads the app config.
+
+### Housekeeping
+- CI runtime Node 22 (SDK 57 ≥ 22.13 requirement).
+- Local Android build: the last configuration blocker is fixed — library
+  modules (react-native-worklets) read `rootProject.ext.ndkVersion`, so the
+  installed NDK 27.2 is now declared at the root (with the app-module override
+  from 0.7.1). The build still requires ≥6 GB free disk; three attempts this
+  session ended in transient plugin resolution, the NDK mismatch, and disk
+  exhaustion — see `docs/ANDROID_BUILD.md`.
+
+### Verification
+- Full suite: **255/255 (20 files)** · strict typecheck exit 0 · web export 0.
+
 ## 0.7.1 — 2026-10-26 (Stage 2B — independent safety hardening)
 
 ### Fixed

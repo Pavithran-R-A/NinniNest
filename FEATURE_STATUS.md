@@ -1,6 +1,21 @@
 # FEATURE_STATUS.md
 
-Last updated: 2026-10-26 (Stage 2B — independent safety hardening)
+Last updated: 2026-10-26 (0.8.0 — final completion mission)
+
+## 0.8.0 — product gaps closed (2026-10-26)
+| Aspect | Status |
+| --- | --- |
+| Photo producer | DONE — expo-image-picker wired into baby create/edit and milestone create; durability ordering tested (copy before persist, previous photo deleted only after commit, rollback removes only new files); demo mode excluded; en+ta messages. |
+| Routine reminders | DONE — pure planner (4 tests) + Android channel + provider resync on routine CRUD and app start; demo never seeds device notifications; informational only. |
+| Web confirmations | DONE — `confirmDialog` (was dead code) wired into Settings and Family destructive flows. |
+| Handoff Copy | DONE — expo-clipboard (the removed RN Clipboard API was a guaranteed device crash). |
+| CSV sharing | DONE — dependency-free stored-zip bundle (4 tests) shared as a file, not a directory URI. |
+| Real-adapter evidence | DONE for web — 6 IndexedDB integration tests against a real spec-compliant store (restart, atomic timers, demo isolation, merge import, failed-write survival). Real expo-sqlite remains NOT TESTED (needs device). |
+| Backup size envelope | DONE — 0/1/20/100 photos → 0.00/0.25/5.01/25.04 MB JSON (linear). |
+| Android APK | NOT PRODUCED — disk-blocked. Build configuration is now fully correct (root NDK override closes the library-module NDK mismatch); dependencies ~80% cached; needs ≥6 GB free to finish. EAS path blocked (no Expo account; creating one out of scope). |
+| Device QA | NOT TESTED — depends on the APK (no emulator launch attempted at low disk). |
+| CI | Infrastructure-blocked — GitHub Actions fails before any step on the account's billing status; workflow valid (Node 22). |
+| Verification | typecheck 0; **255/255 tests, 20 files**; web export 0. |
 
 ## Stage 2B — safety hardening (2026-10-26)
 | Aspect | Status |

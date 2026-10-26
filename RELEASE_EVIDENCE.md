@@ -1,8 +1,61 @@
 # RELEASE_EVIDENCE.md
 
-Recorded: 2026-10-26 · Stage 2B (independent safety hardening) · prior: Stage 2 (staged backup restore + SHA-256, same day), Stage 1 fix (2026-10-18), Phases B/C/D/E/F + P0 Demo Mode fix
+Recorded: 2026-10-26 · 0.8.0 final completion mission · prior: Stage 2B (safety hardening), Stage 2 (staged restore + SHA-256), Stage 1, Phases B–F — same day, same branch
 
-## Stage 2B — independent safety hardening (this run)
+## 0.8.0 — final completion mission (this run)
+
+Base `e72e9de3492b7f4547735655a402712bd1cbcce0` (remote-verified before work;
+`main` untouched at `4902b47e`). Commits this run: photo picker
+(`82a5b61`), clipboard + CSV zip (`b2b31cd`), routine reminders (`6c06431`),
+real-adapter IndexedDB + size envelope (`348d7f7`), and a final commit with
+web confirmations + version display + docs.
+
+### Closed (with source-level evidence)
+- **Photo producer gap**: `persistRecordWithPhoto` (src/models/photoPersist.ts,
+  11 tests) wired into BabyForm/MilestoneForm via family.tsx; managed-copy
+  before persist; previous photo removed only after commit; failed saves
+  rollback only new files; demo excluded; provider deleteBaby/deleteMilestone
+  reclaim media only after record deletion commits.
+- **Routine reminders were never scheduled** (zero callers, same disease as
+  media.ts): pure `planRoutineTriggers` (4 tests) + Android channel +
+  resync-on-CRUD/app-start in AppProvider; demo realm excluded.
+- **`confirmDialog` was dead code** — destructive flows in Settings/Family ran
+  unconfirmed on web; all now route through it.
+- **Handoff Copy** crashed by design on devices (removed RN Clipboard API);
+  now expo-clipboard. **CSV bundle** shared an unsupported directory URI; now
+  a dependency-free stored zip (4 tests, CRC-32 check vector).
+- **Real IndexedDB execution**: 6 integration tests against a spec-compliant
+  store — restart durability, atomic timer completion via the real adapter,
+  demo realm isolation, merge import, failed-write survival.
+- **Backup size envelope measured**: 0/1/20/100 photos → 0.00/0.25/5.01/25.04
+  MB JSON, linear; records-only < 200 KB at 50 babies.
+
+### Android APK — NOT PRODUCED (disk-blocked; config proven correct)
+Three `./gradlew assembleRelease` attempts:
+1. transient kotlin-plugin resolution failure (both repos then verified
+   reachable, HTTP 200),
+2. library-module NDK mismatch — `react-native-worklets` reads
+   `rootProject.ext.ndkVersion`; now overridden at the ROOT build.gradle
+   (27.2.12479018) and the partial 27.1 stub removed; configuration completes,
+3. disk exhaustion — drive hit 0 bytes during dependency transforms; aborted,
+   gradle JVMs and emulator killed, rebuildable transform caches cleared.
+~2 GB of maven dependencies are cached; ≥6 GB free completes the build
+(recipe in docs/ANDROID_BUILD.md). EAS cloud path: `eas whoami` → Not logged
+in; no account created (out of scope). No device QA without an APK.
+
+### Verification (actual results)
+| Check | Command | Exit code | Result |
+| --- | --- | --- | --- |
+| Strict TypeScript | `npm run typecheck` | 0 | clean |
+| Full test suite | `npm test` | 0 | **255/255, 20 files** (was 225 — 30 new) |
+| Web export | `npx expo export --platform web` | 0 | dist/ regenerated |
+| expo-doctor | `npx expo-doctor` | 1 | informational CNG notice only (local uncommitted android/) |
+| Secrets / logging scan | grep over src/app/.github | 0 findings | clean |
+| Remote parity | `git ls-remote` after each push | 0 | verified |
+| Real expo-sqlite / device | — | — | **NOT TESTED** (needs device + APK) |
+| CI | GitHub Actions | — | **BLOCKED before any step** by account billing status (runs `40351509389`, `40358509326`); workflow valid, do not label green |
+
+## Stage 2B — independent safety hardening (2026-10-26)
 
 Base: `88a7689ba4e2803912b93f8a18ed60996d1a0507` (remote-verified equal to origin
 before work started; `main` untouched at `4902b47e`). Four validated commits,
