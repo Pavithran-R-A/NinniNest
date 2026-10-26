@@ -40,6 +40,7 @@ import { confirmDialog } from '@/src/models/confirm';
 import { persistRecordWithPhoto, type PhotoWorkflowIo } from '@/src/models/photoPersist';
 import { importPhoto, deletePhotoIfInManagedDir } from '@/src/models/media';
 import { useI18n } from '@/src/i18n/useI18n';
+import { uuid } from '@/src/models/uuid';
 
 type FamilyTab = 'profiles' | 'growth' | 'milestones' | 'health' | 'routines';
 
@@ -190,7 +191,7 @@ export default function FamilyScreen() {
                 onCancel={closeSheet}
                 onSave={async (b) => {
                   const baby: Baby = {
-                    id: crypto.randomUUID(),
+                    id: uuid(),
                     createdAt: new Date().toISOString(),
                     name: b.name,
                     birthDate: b.birthDate,
@@ -311,7 +312,7 @@ export default function FamilyScreen() {
             onNewVax={() => setSheet('vax')}
             onAdminister={(medId) => {
               addMedicationAdministration({
-                id: crypto.randomUUID(),
+                id: uuid(),
                 babyId: currentBaby?.id ?? '',
                 medicationId: medId,
                 timestamp: new Date().toISOString(),
@@ -369,7 +370,7 @@ export default function FamilyScreen() {
                     );
                   } else {
                     const baby: Baby = {
-                      id: crypto.randomUUID(),
+                      id: uuid(),
                       createdAt: new Date().toISOString(),
                       name: b.name,
                       birthDate: b.birthDate,
@@ -394,7 +395,7 @@ export default function FamilyScreen() {
                 onSave={(g) => {
                   addGrowthRecord({
                     ...g,
-                    id: crypto.randomUUID(),
+                    id: uuid(),
                     babyId: currentBaby.id,
                     ...(isDemo ? { isDemo: true } : {}),
                   });
@@ -435,7 +436,7 @@ export default function FamilyScreen() {
                   }
                   const milestone: MilestoneRecord = {
                     ...fields,
-                    id: crypto.randomUUID(),
+                    id: uuid(),
                     babyId: currentBaby.id,
                     ...(isDemo ? { isDemo: true } : {}),
                   };
@@ -461,7 +462,7 @@ export default function FamilyScreen() {
                 onSave={(m) => {
                   addMedication({
                     ...m,
-                    id: crypto.randomUUID(),
+                    id: uuid(),
                     babyId: currentBaby.id,
                     ...(isDemo ? { isDemo: true } : {}),
                   });
@@ -475,7 +476,7 @@ export default function FamilyScreen() {
                 onSave={(v) => {
                   addVaccination({
                     ...v,
-                    id: crypto.randomUUID(),
+                    id: uuid(),
                     babyId: currentBaby.id,
                     ...(isDemo ? { isDemo: true } : {}),
                   });
@@ -489,7 +490,7 @@ export default function FamilyScreen() {
                 onSave={(r) => {
                   addRoutine({
                     ...r,
-                    id: crypto.randomUUID(),
+                    id: uuid(),
                     babyId: currentBaby.id,
                     ...(isDemo ? { isDemo: true } : {}),
                   });

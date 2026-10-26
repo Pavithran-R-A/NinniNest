@@ -4,6 +4,7 @@ import type { BackupFile, EmbeddedPhotoData, MissingPhotoRef, PhotoManifestEntry
 import { buildBackup } from './backup';
 import { base64ToBytes, bytesToBase64, hashContent, sha256Hex } from './hash';
 import type { AppData, MilestoneRecord } from './types';
+import { uuid } from './uuid';
 
 export { hashContent };
 
@@ -286,7 +287,7 @@ function nativeIo(): MediaPortIo {
   const staging = new Directory(root, STAGING_DIR_NAME);
   return {
     nowMs: () => Date.now(),
-    randomId: () => crypto.randomUUID(),
+    randomId: () => uuid(),
     joinPath: (base, name) => `${base}/${name}`,
     baseName: (p) => p.split('/').pop() ?? p,
     ensureDir: async (path) => {

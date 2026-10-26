@@ -17,6 +17,7 @@ import { useApp } from '@/src/state/AppProvider';
 import { useI18n } from '@/src/i18n/useI18n';
 import { BRAND } from '@/src/i18n/brand';
 import type { Baby } from '@/src/models/types';
+import { uuid } from '@/src/models/uuid';
 
 function isValidDate(s: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
@@ -60,7 +61,7 @@ export default function OnboardingScreen() {
     }
     setSaving(true);
     const baby: Baby = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       name: name.trim(),
       birthDate: birth.trim(),
       createdAt: new Date().toISOString(),

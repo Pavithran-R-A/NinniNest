@@ -58,8 +58,14 @@ Run after installing the APK; tick each row honestly.
 | Small screen (360dp width) | Verify Today dock (6 buttons), Insights bars, Family sheets fit without clipping |
 | Delete baby cascades | Delete a baby, verify all 9 record tables lose only that baby's rows |
 
+## Web rendering — VERIFIED in-browser (2026-10-26, qa/screenshots/web-*.png)
+
+- Onboarding → profile creation → Today dashboard: VERIFIED (360px, real browser).
+- Quick-log diaper → dashboard + ribbon update: VERIFIED.
+- Reload persistence (IndexedDB across full page reload): VERIFIED.
+- Night theme switch: VERIFIED (screenshot).
+- 320/393/412dp widths, Tamil long strings, dynamic font scale: NOT TESTED.
+
 ## NOT TESTED (needs a rendered browser — no browser tool in sandbox)
 
-- Visual rendering of every screen (composition, spacing, safe areas).
-- Web IndexedDB persistence across reloads.
-- Web file-picker import flow.
+- Web file-picker import flow (browser automation cannot drive native pickers).

@@ -1,5 +1,6 @@
 import type { ActiveTimer, CareEvent } from './types';
 import { timerElapsedMinutes } from './timers';
+import { uuid } from './uuid';
 
 export interface TimerExtras {
   durationMin?: number;
@@ -15,7 +16,7 @@ export function buildTimerEvent(timer: ActiveTimer, extras?: TimerExtras): CareE
       ? Math.round(extras.durationMin)
       : Math.round(timerElapsedMinutes(timer));
   const event = {
-    id: crypto.randomUUID(),
+    id: uuid(),
     babyId: timer.babyId,
     type: timer.kind,
     timestamp: new Date().toISOString(),

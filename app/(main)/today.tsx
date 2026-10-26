@@ -39,6 +39,7 @@ import {
   DiaperForm, BottleForm, NoteForm, PumpForm, SolidsForm, ManualDurationForm,
 } from '@/src/screens/QuickLog';
 import { useI18n } from '@/src/i18n/useI18n';
+import { uuid } from '@/src/models/uuid';
 
 type SheetKind =
   | 'diaper' | 'bottle' | 'note' | 'pump' | 'solids'
@@ -106,7 +107,7 @@ export default function TodayScreen() {
     if (!currentBaby) return;
     const now = nowIso();
     const ok = await addTimer({
-      id: crypto.randomUUID(),
+      id: uuid(),
       babyId: currentBaby.id,
       kind,
       startedAt: now,
@@ -165,7 +166,7 @@ export default function TodayScreen() {
     if (!currentBaby) return;
     const ok = await addEvent({
       ...payload,
-      id: crypto.randomUUID(),
+      id: uuid(),
       babyId: currentBaby.id,
       timestamp: nowIso(),
       ...(isDemo ? { isDemo: true } : {}),
