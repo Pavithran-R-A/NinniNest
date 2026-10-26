@@ -13,6 +13,10 @@ const ACTIVE_TIMER_V2_COLUMNS: ColumnDef[] = [
   { name: 'lastSide', ddl: 'TEXT' },
 ];
 
+// Statement runner shared by the database handle and open transactions so the
+// same insert helpers serve both single writes and transactional bulk writes.
+type Runner = Pick<SQLite.SQLiteDatabase, 'runAsync'>;
+
 export class SqliteCareRepository implements CareRepository {
   private db: SQLite.SQLiteDatabase | null = null;
   private demoMode = false;
@@ -333,7 +337,11 @@ export class SqliteCareRepository implements CareRepository {
 
   async addBaby(baby: Baby): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
-    await this.db.runAsync(
+    return this.addBabyOn(this.db, baby);
+  }
+
+  private async addBabyOn(run: Runner, baby: Baby): Promise<void> {
+    await run.runAsync(
       'INSERT OR REPLACE INTO babies (id, name, birthDate, createdAt, photoUri, preferredUnits, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [
         baby.id, baby.name, baby.birthDate, baby.createdAt,
@@ -365,7 +373,11 @@ export class SqliteCareRepository implements CareRepository {
 
   async addEvent(event: CareEvent): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
-    await this.db.runAsync(
+    return this.addEventOn(this.db, event);
+  }
+
+  private async addEventOn(run: Runner, event: CareEvent): Promise<void> {
+    await run.runAsync(
       'INSERT OR REPLACE INTO events (id, babyId, type, timestamp, note, isDemo, payload) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [
         event.id, event.babyId, event.type, event.timestamp,
@@ -385,7 +397,11 @@ export class SqliteCareRepository implements CareRepository {
 
   async addTimer(timer: ActiveTimer): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
-    await this.db.runAsync(
+    return this.addTimerOn(this.db, timer);
+  }
+
+  private async addTimerOn(run: Runner, timer: ActiveTimer): Promise<void> {
+    await run.runAsync(
       'INSERT OR REPLACE INTO active_timers (id, babyId, kind, startedAt, side, segments, lastSide, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         timer.id, timer.babyId, timer.kind, timer.startedAt, timer.side ?? null,
@@ -401,7 +417,11 @@ export class SqliteCareRepository implements CareRepository {
 
   async addGrowthRecord(record: GrowthRecord): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
-    await this.db.runAsync(
+    return this.addGrowthRecordOn(this.db, record);
+  }
+
+  private async addGrowthRecordOn(run: Runner, record: GrowthRecord): Promise<void> {
+    await run.runAsync(
       'INSERT OR REPLACE INTO growth_records (id, babyId, date, weightGrams, heightCm, headCircumferenceCm, note, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         record.id, record.babyId, record.date, record.weightGrams ?? null,
@@ -418,7 +438,11 @@ export class SqliteCareRepository implements CareRepository {
 
   async addMilestone(record: MilestoneRecord): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
-    await this.db.runAsync(
+    return this.addMilestoneOn(this.db, record);
+  }
+
+  private async addMilestoneOn(run: Runner, record: MilestoneRecord): Promise<void> {
+    await run.runAsync(
       'INSERT OR REPLACE INTO milestones (id, babyId, category, title, date, note, photoUri, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         record.id, record.babyId, record.category, record.title, record.date,
@@ -434,7 +458,11 @@ export class SqliteCareRepository implements CareRepository {
 
   async addMedication(record: MedicationRecord): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
-    await this.db.runAsync(
+    return this.addMedicationOn(this.db, record);
+  }
+
+  private async addMedicationOn(run: Runner, record: MedicationRecord): Promise<void> {
+    await run.runAsync(
       'INSERT OR REPLACE INTO medications (id, babyId, name, instructions, doseAmount, doseUnit, notes, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         record.id, record.babyId, record.name, record.instructions ?? null,
@@ -454,7 +482,11 @@ export class SqliteCareRepository implements CareRepository {
 
   async addMedicationAdministration(record: MedicationAdministration): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
-    await this.db.runAsync(
+    return this.addMedicationAdministrationOn(this.db, record);
+  }
+
+  private async addMedicationAdministrationOn(run: Runner, record: MedicationAdministration): Promise<void> {
+    await run.runAsync(
       'INSERT OR REPLACE INTO medication_administrations (id, babyId, medicationId, timestamp, doseAmount, doseUnit, note, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         record.id, record.babyId, record.medicationId, record.timestamp,
@@ -471,7 +503,11 @@ export class SqliteCareRepository implements CareRepository {
 
   async addVaccination(record: VaccinationRecord): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
-    await this.db.runAsync(
+    return this.addVaccinationOn(this.db, record);
+  }
+
+  private async addVaccinationOn(run: Runner, record: VaccinationRecord): Promise<void> {
+    await run.runAsync(
       'INSERT OR REPLACE INTO vaccinations (id, babyId, name, dateGiven, nextAppointment, provider, notes, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         record.id, record.babyId, record.name, record.dateGiven,
@@ -488,7 +524,11 @@ export class SqliteCareRepository implements CareRepository {
 
   async addRoutine(record: RoutineTemplate): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
-    await this.db.runAsync(
+    return this.addRoutineOn(this.db, record);
+  }
+
+  private async addRoutineOn(run: Runner, record: RoutineTemplate): Promise<void> {
+    await run.runAsync(
       'INSERT OR REPLACE INTO routines (id, babyId, title, kind, timeOfDay, days, active, isDemo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         record.id, record.babyId, record.title, record.kind, record.timeOfDay,
@@ -504,22 +544,41 @@ export class SqliteCareRepository implements CareRepository {
 
   async replaceAll(data: AppData): Promise<void> {
     if (!this.db) throw new Error('repository not initialised');
-    await this.db.withTransactionAsync(async () => {
+    // EXCLUSIVE (not the default DEFERRED): a backup import is the one moment
+    // a bulk rewrite meets potentially concurrent single-row writes (a timer
+    // finishing, a quick log). With DEFERRED those writes could JOIN the open
+    // transaction and silently vanish if it rolled back; EXCLUSIVE keeps them
+    // queued until the import has committed (or rolled back) as a unit.
+    await this.db.withExclusiveTransactionAsync(async (txn) => {
       for (const table of [
         'babies', 'events', 'active_timers', 'growth_records', 'milestones',
         'medications', 'medication_administrations', 'vaccinations', 'routines',
       ]) {
-        await this.db!.runAsync(`DELETE FROM ${table}`);
+        await txn.runAsync(`DELETE FROM ${table}`);
       }
-      for (const b of data.babies) await this.addBaby(b);
-      for (const e of data.events) await this.addEvent(e);
-      for (const t of data.activeTimers) await this.addTimer(t);
-      for (const g of data.growthRecords) await this.addGrowthRecord(g);
-      for (const m of data.milestones) await this.addMilestone(m);
-      for (const m of data.medications) await this.addMedication(m);
-      for (const a of data.medicationAdministrations) await this.addMedicationAdministration(a);
-      for (const v of data.vaccinations) await this.addVaccination(v);
-      for (const r of data.routines) await this.addRoutine(r);
+      for (const b of data.babies) await this.addBabyOn(txn, b);
+      for (const e of data.events) await this.addEventOn(txn, e);
+      for (const t of data.activeTimers) await this.addTimerOn(txn, t);
+      for (const g of data.growthRecords) await this.addGrowthRecordOn(txn, g);
+      for (const m of data.milestones) await this.addMilestoneOn(txn, m);
+      for (const m of data.medications) await this.addMedicationOn(txn, m);
+      for (const a of data.medicationAdministrations) await this.addMedicationAdministrationOn(txn, a);
+      for (const v of data.vaccinations) await this.addVaccinationOn(txn, v);
+      for (const r of data.routines) await this.addRoutineOn(txn, r);
+    });
+  }
+
+  /**
+   * Timer completion in ONE exclusive transaction: the journal event and the
+   * timer removal commit together or not at all. This closes the kill-between-
+   * writes window (duplicate event on retry) and the double-tap window that
+   * the compensating fallback could only narrow.
+   */
+  async completeTimerAtomic(event: CareEvent, timerId: string): Promise<void> {
+    if (!this.db) throw new Error('repository not initialised');
+    await this.db.withExclusiveTransactionAsync(async (txn) => {
+      await this.addEventOn(txn, event);
+      await txn.runAsync('DELETE FROM active_timers WHERE id = ?', [timerId]);
     });
   }
 

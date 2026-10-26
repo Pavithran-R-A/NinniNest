@@ -36,9 +36,18 @@ export interface EventWriter {
   addEvent(event: CareEvent): Promise<void>;
   deleteEvent(eventId: string): Promise<void>;
   deleteTimer(timerId: string): Promise<void>;
+  /**
+   * OPTIONAL atomic path (see CareRepository.completeTimerAtomic): adapters
+   * that can commit the event and the timer removal in one storage-level
+   * transaction expose it here. When present it is always preferred.
+   */
+  completeTimerAtomic?(event: CareEvent, timerId: string): Promise<void>;
 }
 
 // Safe timer completion ordering:
+//  0. adapters with completeTimerAtomic commit BOTH writes in one storage
+//     transaction — no intermediate state exists at all;
+//  otherwise:
 //  1. build + validate the event FIRST (validation failure => timer untouched)
 //  2. commit the event
 //  3. only then remove the timer
@@ -52,6 +61,15 @@ export async function commitTimerCompletion(
 ): Promise<{ ok: boolean; event: CareEvent | null }> {
   const event = buildTimerEvent(timer, extras);
   if (!event || !isValidEvent(event)) return { ok: false, event: null };
+  if (typeof repo.completeTimerAtomic === 'function') {
+    try {
+      await repo.completeTimerAtomic(event, timer.id);
+      return { ok: true, event };
+    } catch {
+      // the adapter owns the transaction: nothing was committed on failure
+      return { ok: false, event };
+    }
+  }
   try {
     await repo.addEvent(event);
   } catch {

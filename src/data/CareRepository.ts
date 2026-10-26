@@ -29,6 +29,14 @@ export interface CareRepository {
   deleteRoutine(id: string): Promise<void>;
   replaceAll(data: AppData): Promise<void>;
   close(): Promise<void>;
+  /**
+   * OPTIONAL adapter capability: commit a finished timer's journal event and
+   * remove the timer in ONE storage-level transaction. Adapters that can make
+   * this atomic (SQLite exclusive transaction, single-key IndexedDB put)
+   * implement it; adapters that cannot leave it undefined and the caller
+   * falls back to the compensating event-first ordering.
+   */
+  completeTimerAtomic?(event: CareEvent, timerId: string): Promise<void>;
   // Demo isolation: swaps the adapter between personal storage and a separate
   // demo storage realm. Personal rows must never be readable or writable while
   // demo mode is active, and must survive entry, exit and restart untouched.

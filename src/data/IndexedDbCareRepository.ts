@@ -207,6 +207,15 @@ export class IndexedDbCareRepository implements CareRepository {
     });
   }
 
+  // One keyed put is atomic in IndexedDB: the journal event and the timer
+  // removal land together or not at all.
+  async completeTimerAtomic(event: CareEvent, timerId: string): Promise<void> {
+    await this.saveAll((d) => {
+      d.events.push(event);
+      d.activeTimers = d.activeTimers.filter((t) => t.id !== timerId);
+    });
+  }
+
   // Personal rows live under APP_KEY, demo rows under DEMO_KEY. Switching the
   // flag swaps realms; the other realm's bytes are never read or written.
   async setDemoMode(on: boolean): Promise<void> {
