@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## 0.9.1 — 2026-10-26 (first real Android run: two P0/P1 defects found and fixed)
+
+### Fixed
+- **Native record creation was broken** (found in the first real device run):
+  Hermes does not implement `crypto.randomUUID` and no polyfill was installed,
+  so every save on Android/iOS threw a silent TypeError — onboarding hung on
+  "Saving…" forever in release builds. New `src/models/uuid.ts` prefers
+  WebCrypto, falls back to `getRandomValues`, then `Math.random` (ids are
+  local row keys, not secrets). All 13 call sites migrated; 3 tests.
+- **Returning users landed on the welcome screen after every cold start**
+  (web reload masked it): the root route is a static welcome, one tap away
+  from creating a duplicate profile. The root now replaces to Today once a
+  profile exists; first-run users still see welcome → onboarding. Found via
+  device QA after proving SQLite persistence actually works across
+  force-stop and even an APK update install.
+
+### Verified on device (Pixel_10 emulator, API 37, disposable data)
+Install → cold launch → notification permission → onboarding → Today →
+quick-log diaper → force-stop → relaunch: profile and event survive.
+APK artifacts built on hosted runners from exact SHAs, SHA-256 verified
+locally on every download.
+
+### Housekeeping
+- `expo-notifications` mode `expo-push-notifications` → `broadcast`.
+- CI: dependency advisories reported as warnings with a documented
+  known-findings policy; android-qa-build produces a debug-signed release
+  APK artifact per push.
+
 ## 0.9.0 — 2026-10-26 (reproducible Android builds; milestone editing; import bounds)
 
 ### Added

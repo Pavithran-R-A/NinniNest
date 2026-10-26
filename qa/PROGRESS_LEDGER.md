@@ -17,12 +17,27 @@ RELEASE_EVIDENCE.md. Update after every milestone.
 - Version alignment: app.json version 0.9.0, versionCode 2 (was 1.0.0/1); changelog 0.9.0.
 - Suite at last gate: **260/260, 23 files; typecheck 0.**
 
-## NEXT (in order)
-1. Commit + push (ONE controlled CI attempt → answers whether public visibility fixed Actions; android-qa-build produces the APK if so).
-2. If Actions works: download APK artifact, boot emulator (exists, no downloads), run the device matrix with disposable data, scope adb to `-s emulator-5554`.
-3. If Actions still account-blocked: produce the GitHub Support escalation note; keep APK/device gates BLOCKED; continue with localization sweep + browser UI QA (node_repl browser may now be available).
-4. Localization sweep (Growth/Med/Vax/Routine forms + Settings dialogs hardcoded English).
-5. Doc consistency: latest-certified numbers everywhere (260/260/23) with historical checkpoints preserved.
+## DONE this mission (continued)
+- Phase 1 VERIFIED: **CI GREEN on the public repo** (run 40378760597, 1m20s) — typecheck + 260 tests + web export + security-severity report, real executed steps. The earlier failures were pre-visibility billing blocks; the owner's public change fixed Actions.
+- Phase 3 VERIFIED: **real installable APK from CI** — run 40385288846 (release, debug-signed, 134 MB), SHA-256 `4a1cc31f…` verified locally byte-for-byte; superseded by run 40390218128 (`68493da8…`, includes the UUID fix) and the pending 1252c02 build (routing fix). Workflow path bug (empty locate step uploaded android/ tree, 1 GB) found and fixed.
+- Phase 8 device QA (Pixel_10 emulator, API 37, disposable data):
+  - FOUND+FIXED **P0 native blocker**: Hermes has no `crypto.randomUUID` and no polyfill existed — onboarding save hung forever in release builds (silent TypeError). Fixed via src/models/uuid.ts (3 tests, all 13 call sites migrated). Verified: onboarding → Today now works on device (screenshots android-05/06).
+  - VERIFIED: quick-log diaper on device → metrics card + ribbon update (android-08).
+  - VERIFIED: **SQLite persistence across force-stop** — profile + diaper survived (android-10 deep-link check).
+  - FOUND+FIXED **P1 routing defect**: cold start always landed on the static welcome (web SPA reload masked it); returning users were one tap from a duplicate profile. Root route now replaces to Today when a profile exists (1252c02); final verification build in flight.
+- Web QA (browser, 360px): onboarding E2E, diaper log, reload persistence, night theme — screenshots in qa/screenshots/web-*.png.
+
+## NEXT → DONE
+1. ✅ 1252c02 APK (SHA 31d97e02…, run 40395296894) downloaded, verified, installed.
+2. ✅ Device verification: cold start lands on Today with prior-session data (android-11 screenshot).
+3. ✅ Final docs committed (CHANGELOG 0.9.1, FEATURE_STATUS, RELEASE_EVIDENCE final section).
+
+## REMAINING FOR FULL RELEASE (all reproducible, none blocking the branch)
+- Device sessions: reminder delivery + reboot, backup/restore with photos, timer across restart, photo capture end-to-end.
+- UI matrix: 320–412dp, Tamil long strings, dynamic type (web 360px done).
+- Localization sweep for Growth/Med/Vax/Routine form strings.
+- Play-store declarations (owner-level).
+
 
 ## BLOCKED / NOT EXECUTABLE
 - Local Gradle builds (disk); EAS (no account); real expo-sqlite runtime (needs device/APK).

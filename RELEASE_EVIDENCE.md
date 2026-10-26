@@ -1,8 +1,55 @@
 # RELEASE_EVIDENCE.md
 
-Recorded: 2026-10-26 · 0.8.0 final completion mission · prior: Stage 2B (safety hardening), Stage 2 (staged restore + SHA-256), Stage 1, Phases B–F — same day, same branch
+Recorded: 2026-10-26 (final) · 100%-release mission: real APK built on CI, real Android device QA, two P0 native defects found and fixed · prior: 0.8.0, Stage 2B, Stage 2 — same branch, same day
 
-## 0.8.0 — final completion mission (this run)
+## Final mission — verified end-to-end (this run)
+
+Starting HEAD `439eeca` (remote-verified). Final HEAD: see git log — pushes verified with `git ls-remote` after every push. `main` untouched at `4902b47e`.
+
+### Infrastructure — CI UNBLOCKED
+The owner changed the repository to PUBLIC; GitHub-hosted runners now work.
+- **CI verified GREEN on a hosted runner**: run `40378760597` (1m20s) — npm ci, strict typecheck, full suite, web export, security-severity report, all real executed steps. (Earlier runs `40358509326`/`40374094635` failed before steps under the private-repo billing block — historical.)
+- **Android QA build workflow** (`android-qa-build.yml`): clean checkout → versioned-config prebuild → `assembleRelease` (debug-signed, embedded JS bundle) → aapt badging → SHA-256 → artifact (7-day retention), minimal `contents: read` permissions.
+
+### Reproducible Android configuration (Phase 2 — P0)
+The NDK fix previously lived only in the untracked generated `android/` folder. New **`plugins/withNdkVersion`** config plugin (wired in app.json) pins `rootProject.ext.ndkVersion = 27.1.12297006` — the NDK React Native 0.86.3 itself declares. Verified from a clean temporary checkout: prebuild generates the pin, reruns are idempotent, and **CI builds from a pristine checkout succeed with it** (runs `40385288846`, `40390218128`, `40395296894` — three clean-runner builds).
+
+### Real APK artifacts (Phase 3 — P0)
+| Run | Commit | APK SHA-256 | Result |
+| --- | --- | --- | --- |
+| `40385288846` | `b82a647` | `4a1cc31f…837ffd` | 134 MB, verified locally byte-for-byte |
+| `40390218128` | `1efcfc2` | `68493da8…46cf` | includes UUID fix |
+| `40395296894` | `1252c02` | `31d97e02…83249` | **final** — includes routing fix; installed on emulator |
+
+Package `app.ninninest.journal`, version 0.9.0, versionCode 2, debug-signed (never production keys).
+
+### Real Android QA (Phase 8 — Pixel_10 emulator, API 37, disposable data)
+| Item | Status |
+| --- | --- |
+| APK install (streamed install, `Success`) | VERIFIED |
+| Cold launch → welcome renders (arc motif, tagline) | VERIFIED (android-02) |
+| Notification permission dialog at launch → Allow | VERIFIED (android-02) |
+| Onboarding: nickname + birth date → Today | FAILED then FIXED — **P0: Hermes lacks `crypto.randomUUID`**, save hung forever in release (silent TypeError; web never hits it). Fixed (`src/models/uuid.ts` + all 13 call sites, 3 tests); re-verified on device (android-06) |
+| Quick-log diaper → metrics card + ribbon | VERIFIED (android-08) |
+| Force-stop → relaunch: SQLite persistence | VERIFIED (android-10; data survived force-stop AND an APK update install) |
+| Cold-start landing for returning users | FAILED then FIXED — **P1: root route was a static welcome** (web SPA reload masked it); duplicate-profile hazard. Fixed (1252c02): cold start lands straight on Today with prior data (android-11) |
+| Reminder delivery, reboot persistence, backup/restore on device, timers across restart, photo capture | NOT TESTED (needs more device sessions; matrix rows kept honest) |
+
+### Web QA (browser, 360px, screenshots in qa/screenshots/)
+Onboarding E2E, quick-log diaper, IndexedDB reload persistence, night theme — VERIFIED with rendered evidence.
+
+### Security (Phase 7)
+- npm audit: 17 advisories. Reachability analysis: shell-quote (critical) + node-forge/ws (high) are build-time transitives of the `expo` CLI toolchain, not upgradable inside SDK 57; the runtime-reachable zod oversized-collection advisory is mitigated by import bounds (300 MB JSON cap + per-collection caps, 5 tests). CI reports every advisory as a workflow warning (known-findings policy).
+- Secrets scan: none in source. Mimosa full scan did not complete (partial callgraph per its own hook notice) — no "security-audited" claim is made.
+- Local-only posture hardened: `expo-notifications` moved from remote-push mode to `broadcast` (no push capability declared).
+
+### Gates (latest certified)
+`npm run typecheck` 0 · `npm test` 0 — **263/263, 24 files** · web export 0 · CI green on hosted runner · expo-doctor 1 (informational CNG notice only).
+
+### Remaining to full 100% (honest)
+Device sessions for: reminder delivery + reboot, backup/restore with photos on device, timer across restart, 320–412dp/Tamil/dynamic-type visual matrix, Play-store privacy declarations. All infrastructure to produce and verify each of these now exists and is reproducible from a clean checkout.
+
+## 0.8.0 — final completion mission (2026-10-26)
 
 Base `e72e9de3492b7f4547735655a402712bd1cbcce0` (remote-verified before work;
 `main` untouched at `4902b47e`). Commits this run: photo picker

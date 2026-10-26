@@ -1,6 +1,19 @@
 # FEATURE_STATUS.md
 
-Last updated: 2026-10-26 (0.8.0 — final completion mission)
+Last updated: 2026-10-26 (0.9.1 — first real Android run; CI green; APK from clean checkout)
+
+## 0.9.1 — release mission (2026-10-26)
+| Aspect | Status |
+| --- | --- |
+| CI on GitHub-hosted runners | DONE/VERIFIED — repo public; run 40378760597 green (typecheck + suite + export + security report) |
+| Reproducible Android config | DONE — plugins/withNdkVersion pins RN's declared NDK 27.1.12297006; clean-checkout + idempotency verified; three clean-runner builds succeeded |
+| Installable APK | DONE — android-qa-build artifact, release/debug-signed, SHA-256 verified locally on every download (final: 31d97e02… from 1252c02) |
+| Native UUID blocker | FIXED — crypto.randomUUID missing on Hermes; uuid.ts + 13 call sites + 3 tests; onboarding verified working on device |
+| Returning-user routing | FIXED — cold start opens Today when a profile exists; verified on device after force-stop AND an APK update |
+| Device QA | PARTIAL — install/cold start/onboarding/quick-log/persistence/routing VERIFIED with screenshots; reminder delivery, reboot, device backup/restore, photo capture NOT TESTED |
+| Import bounds | DONE — 300 MB JSON cap + per-collection caps before parse (zod advisory mitigation); 5 tests |
+| Milestone editing | DONE — fields + photo replace/remove with durability ordering |
+| Suite | 263/263, 24 files; typecheck 0; web export 0 |
 
 ## 0.8.0 — product gaps closed (2026-10-26)
 | Aspect | Status |
