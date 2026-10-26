@@ -5,7 +5,7 @@ import {
 } from './validation';
 import { BACKUP_VERSION, emptyData, mergeData, type BackupFile, type ImportMode } from './backup';
 import type { EmbeddedPhoto } from './mediaBackup';
-import { base64ToBytes, hashContent, sha256Hex } from './hash';
+import { decodeBase64Strict, hashContent, sha256Hex } from './hash';
 
 export interface ImportIssue {
   severity: 'error' | 'warning';
@@ -182,6 +182,15 @@ export function planImport(json: string, current: AppData, mode: ImportMode): Im
   let invalidRefs = 0;
   let duplicateRefs = 0;
   let unsafeNames = 0;
+  let malformedPayloads = 0;
+  let unsupportedAlgo = 0;
+  let badIntegrityMeta = 0;
+  // The verifier an entry must satisfy is decided by the file's own backup
+  // version, never by what the entry claims alone: v5+ entries are
+  // cryptographic (SHA-256 over decoded bytes, byte length required); v4 and
+  // older use the legacy checksum and must NOT be reinterpreted as SHA-256.
+  const isV5Plus = version >= 5;
+  const SHA256_RE = /^[0-9a-f]{64}$/;
   for (const p of rawPhotos) {
     if (!p || typeof p !== 'object' || !p.recordId || !p.field) continue;
     const refOk =
@@ -209,13 +218,51 @@ export function planImport(json: string, current: AppData, mode: ImportMode): Im
       photos.push(p);
       continue;
     }
-    const algo = p.hashAlgo ?? 'legacy-fnv';
-    const digestMatches = algo === 'sha256'
-      ? sha256Hex(base64ToBytes(p.base64)) === p.sha256
-      : hashContent(p.base64) === p.sha256;
-    if (p.sha256 && !digestMatches) {
-      corruptPhotos += 1;
+
+    // Entries claiming bytes must decode as canonical base64 before anything
+    // else can be trusted.
+    const decoded = decodeBase64Strict(p.base64);
+    if (decoded === null) {
+      malformedPayloads += 1;
       continue;
+    }
+
+    if (isV5Plus) {
+      if (p.hashAlgo !== 'sha256') {
+        // Absent, 'legacy-fnv' or anything else is an invalid combination on
+        // v5 — the era of noncryptographic checksums is over.
+        unsupportedAlgo += 1;
+        continue;
+      }
+      if (typeof p.sha256 !== 'string' || !SHA256_RE.test(p.sha256)) {
+        badIntegrityMeta += 1;
+        continue;
+      }
+      if (typeof p.bytes !== 'number' || !Number.isInteger(p.bytes) || p.bytes < 0) {
+        badIntegrityMeta += 1;
+        continue;
+      }
+      if (decoded.length !== p.bytes || sha256Hex(decoded) !== p.sha256) {
+        corruptPhotos += 1;
+        continue;
+      }
+    } else {
+      if (p.hashAlgo !== undefined && p.hashAlgo !== 'legacy-fnv') {
+        // A v4 file cannot carry v5 semantics; never reinterpret its
+        // checksum field as a cryptographic digest.
+        unsupportedAlgo += 1;
+        continue;
+      }
+      if (typeof p.sha256 !== 'string' || p.sha256.length === 0) {
+        // Media bytes without ANY checksum cannot be verified — a malformed
+        // or hand-edited archive, rejected rather than trusted.
+        badIntegrityMeta += 1;
+        continue;
+      }
+      if (hashContent(p.base64) !== p.sha256) {
+        corruptPhotos += 1;
+        continue;
+      }
     }
     photos.push(p);
   }
@@ -235,6 +282,24 @@ export function planImport(json: string, current: AppData, mode: ImportMode): Im
     issues.push({
       severity: 'error',
       message: `${unsafeNames} embedded photo(s) have unsafe file names. The import was stopped rather than write outside the app's media area.`,
+    });
+  }
+  if (malformedPayloads) {
+    issues.push({
+      severity: 'error',
+      message: `${malformedPayloads} embedded photo(s) are not valid base64. The import was stopped rather than restore a payload that cannot be decoded exactly.`,
+    });
+  }
+  if (unsupportedAlgo) {
+    issues.push({
+      severity: 'error',
+      message: `${unsupportedAlgo} embedded photo(s) declare an integrity method that does not match this backup's version. The import was stopped rather than guess how to verify them.`,
+    });
+  }
+  if (badIntegrityMeta) {
+    issues.push({
+      severity: 'error',
+      message: `${badIntegrityMeta} embedded photo(s) have missing or malformed integrity metadata (digest or byte length). The import was stopped rather than trust unverifiable media.`,
     });
   }
   if (corruptPhotos) {

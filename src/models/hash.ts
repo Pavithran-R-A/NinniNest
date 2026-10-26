@@ -95,3 +95,29 @@ export function bytesToBase64(bytes: Uint8Array): string {
   }
   return btoa(binary);
 }
+
+/**
+ * Strict, canonical base64 decoding for untrusted backup payloads. Accepts
+ * only the exact encoding bytesToBase64 would produce: correct alphabet, no
+ * whitespace, length a multiple of four, at most two trailing '=' pads, no
+ * padding mid-string, and zeroed trailing bits. Returns null for anything
+ * else — callers treat null as a hard integrity error, never a best-effort
+ * decode.
+ */
+export function decodeBase64Strict(b64: string): Uint8Array | null {
+  if (typeof b64 !== 'string') return null;
+  if (b64.length === 0) return new Uint8Array(0);
+  if (b64.length % 4 !== 0) return null;
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) return null;
+  const firstPad = b64.indexOf('=');
+  if (firstPad !== -1 && firstPad !== b64.length - 2 && firstPad !== b64.length - 1) return null;
+  try {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    if (bytesToBase64(bytes) !== b64) return null; // noncanonical trailing bits
+    return bytes;
+  } catch {
+    return null;
+  }
+}

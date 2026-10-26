@@ -181,7 +181,7 @@ describe('P0-3 photosEmbedded parity, remap and hash verification', () => {
 
   it('planImport reads photosEmbedded entries (the export field)', () => {
     const backup = {
-      app: 'NinniNest', backupVersion: BACKUP_VERSION, exportedAt: '2026-10-17T00:00:00.000Z',
+      app: 'NinniNest', backupVersion: 4, exportedAt: '2026-10-17T00:00:00.000Z',
       data: { ...dataWith([baby()], [event()]), milestones: [milestoneWithPhoto()] }, photos: [],
       photosEmbedded: [
         { recordId: M1, field: 'milestonePhoto', fileName: '1-abc.jpg', base64: b64, sha256: sha },
@@ -195,7 +195,7 @@ describe('P0-3 photosEmbedded parity, remap and hash verification', () => {
 
   it('planImport also accepts legacy photos entries that carry base64', () => {
     const backup = {
-      app: 'NinniNest', backupVersion: BACKUP_VERSION, exportedAt: '2026-10-17T00:00:00.000Z',
+      app: 'NinniNest', backupVersion: 4, exportedAt: '2026-10-17T00:00:00.000Z',
       data: dataWith([baby()], [event()]),
       photos: [
         { recordId: B1, field: 'babyPhoto', fileName: 'p.jpg', base64: b64, sha256: sha },
@@ -209,7 +209,7 @@ describe('P0-3 photosEmbedded parity, remap and hash verification', () => {
 
   it('corrupted embedded payload is a hard error, not a silent skip', () => {
     const backup = {
-      app: 'NinniNest', backupVersion: BACKUP_VERSION, exportedAt: '2026-10-17T00:00:00.000Z',
+      app: 'NinniNest', backupVersion: 4, exportedAt: '2026-10-17T00:00:00.000Z',
       data: { ...dataWith([baby()], [event()]), milestones: [milestoneWithPhoto()] }, photos: [],
       photosEmbedded: [
         { recordId: M1, field: 'milestonePhoto', fileName: '1-abc.jpg', base64: b64, sha256: 'deadbeef' },

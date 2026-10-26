@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { planImport, applyImportPlan, runBackupImport } from '../src/models/importPlan';
 import { buildBackup, BACKUP_VERSION, emptyData } from '../src/models/backup';
-import { hashContent } from '../src/models/hash';
+import { base64ToBytes, sha256Hex } from '../src/models/hash';
 import { MemoryCareRepository } from '../src/data/MemoryCareRepository';
 import type { AppData, Baby, CareEvent } from '../src/models/types';
 
@@ -115,7 +115,13 @@ describe('Stage 1 import safety: malformed imports never modify existing records
     const plan = planImport(
       backupJson({
         photosEmbedded: [
-          { recordId: BABY.id, field: 'babyPhoto', fileName: 'profile.jpg', base64: tampered, sha256: hashContent(payload) },
+          {
+            recordId: BABY.id, field: 'babyPhoto', fileName: 'profile.jpg',
+            base64: tampered,
+            sha256: sha256Hex(base64ToBytes(payload)), // digest of the ORIGINAL bytes
+            bytes: base64ToBytes(payload).length,
+            hashAlgo: 'sha256' as const,
+          },
         ],
       }),
       currentData(),
