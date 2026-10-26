@@ -44,7 +44,8 @@ jobs:
       - name: Locate APK and record provenance
         id: apk
         run: |
-          APK=$(find app/build/outputs/apk -name "*.apk" | head -1)
+          APK=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
+          if [ -z "$APK" ]; then echo "::error::no APK produced"; exit 1; fi
           echo "path=$APK" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$APK")" >> "$GITHUB_OUTPUT"
           echo "sha256=$(sha256sum "$APK" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
@@ -57,6 +58,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ninninest-qa-apk-${{ github.sha }}
-          path: android/${{ steps.apk.outputs.path }}
+          path: ${{ steps.apk.outputs.path }}
           retention-days: 7
           if-no-files-found: error
