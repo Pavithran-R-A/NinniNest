@@ -164,6 +164,7 @@ export function BabyForm({
   canUsePhotos?: boolean;
 }) {
   const t = useTheme();
+  const { t: tr } = useI18n();
   const [name, setName] = useState(initial?.name ?? '');
   const [birthDate, setBirthDate] = useState(initial?.birthDate ?? '');
   const [units, setUnits] = useState<'metric' | 'imperial'>(initial?.preferredUnits ?? 'metric');
@@ -175,11 +176,11 @@ export function BabyForm({
 
   const save = () => {
     if (!name.trim()) {
-      setError('Give this profile a name.');
+      setError(tr('form.baby.errName'));
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
-      setError('Birth date must be YYYY-MM-DD.');
+      setError(tr('form.err.birthDate'));
       return;
     }
     onSave({
@@ -195,17 +196,17 @@ export function BabyForm({
   return (
     <View>
       <SheetHeader
-        title={initial ? 'Edit profile' : 'New profile'}
-        subtitle="Each profile keeps its own journal, timers and history."
+        title={initial ? tr('form.baby.editTitle') : tr('form.baby.newTitle')}
+        subtitle={tr('form.baby.subtitle')}
         onCancel={onCancel}
       />
-      <Field label="Name">
-        <TextInputField label="Name" value={name} onChangeText={setName} placeholder="Aru" maxLength={40} />
+      <Field label={tr('form.baby.name')}>
+        <TextInputField label={tr('form.baby.name')} value={name} onChangeText={setName} placeholder="Aru" maxLength={40} />
       </Field>
-      <Field label="Birth date" hint="Format YYYY-MM-DD, e.g. 2026-08-14.">
-        <TextInputField label="Birth date" value={birthDate} onChangeText={setBirthDate} placeholder="2026-08-14" maxLength={10} keyboardType="number-pad" />
+      <Field label={tr('form.baby.birthDate')} hint={tr('form.baby.birthDateHint')}>
+        <TextInputField label={tr('form.baby.birthDate')} value={birthDate} onChangeText={setBirthDate} placeholder="2026-08-14" maxLength={10} keyboardType="number-pad" />
       </Field>
-      <Field label="Preferred units">
+      <Field label={tr('form.baby.units')}>
         <SegmentedControl
           label="Preferred units"
           options={[
@@ -216,7 +217,7 @@ export function BabyForm({
           onChange={setUnits}
         />
       </Field>
-      <Field label="Photo">
+      <Field label={tr('form.photo')}>
         <PhotoSection
           previewUri={shownPhoto}
           canUsePhotos={canUsePhotos}
@@ -245,6 +246,7 @@ export function GrowthForm({
   onSave: (g: Omit<GrowthRecord, 'id' | 'babyId'>) => void;
 }) {
   const t = useTheme();
+  const { t: tr } = useI18n();
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
@@ -254,7 +256,7 @@ export function GrowthForm({
 
   const save = () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      setError('Date must be YYYY-MM-DD.');
+      setError(tr('form.err.date'));
       return;
     }
     let weightGrams: number | undefined;
@@ -263,41 +265,41 @@ export function GrowthForm({
     if (weight.trim()) {
       const n = Number(weight);
       if (Number.isNaN(n) || n <= 0) {
-        setError('Weight must be a positive number.');
+        setError(tr('form.growth.errWeight'));
         return;
       }
       weightGrams = units === 'imperial' ? Math.round(n * 453.592) : Math.round(n * 1000);
       if (weightGrams < 250 || weightGrams > 25000) {
-        setError('Weight looks outside a plausible range (0.25–25 kg).');
+        setError(tr('form.growth.errWeightRange'));
         return;
       }
     }
     if (height.trim()) {
       const n = Number(height);
       if (Number.isNaN(n) || n <= 0) {
-        setError('Height must be a positive number.');
+        setError(tr('form.growth.errHeight'));
         return;
       }
       heightCm = units === 'imperial' ? Math.round(n * 2.54 * 10) / 10 : Math.round(n * 10) / 10;
       if (heightCm < 20 || heightCm > 200) {
-        setError('Height looks outside a plausible range (20–200 cm).');
+        setError(tr('form.growth.errHeightRange'));
         return;
       }
     }
     if (head.trim()) {
       const n = Number(head);
       if (Number.isNaN(n) || n <= 0) {
-        setError('Head circumference must be a positive number.');
+        setError(tr('form.growth.errHead'));
         return;
       }
       headCm = units === 'imperial' ? Math.round(n * 2.54 * 10) / 10 : Math.round(n * 10) / 10;
       if (headCm < 20 || headCm > 60) {
-        setError('Head circumference looks outside a plausible range (20–60 cm).');
+        setError(tr('form.growth.errHeadRange'));
         return;
       }
     }
     if (weightGrams === undefined && heightCm === undefined && headCm === undefined) {
-      setError('Enter at least one measurement.');
+      setError(tr('form.growth.errNone'));
       return;
     }
     onSave({
@@ -312,27 +314,27 @@ export function GrowthForm({
   return (
     <View>
       <SheetHeader
-        title="Growth measurement"
-        subtitle="Descriptive trends only — no percentile curves are calculated."
+        title={tr('form.growth.title')}
+        subtitle={tr('form.growth.subtitle')}
         onCancel={onCancel}
       />
-      <Field label="Date" hint="YYYY-MM-DD.">
-        <TextInputField label="Date" value={date} onChangeText={setDate} maxLength={10} keyboardType="number-pad" />
+      <Field label="Date" hint={tr('form.hint.date')}>
+        <TextInputField label={tr('form.date')} value={date} onChangeText={setDate} maxLength={10} keyboardType="number-pad" />
       </Field>
       <Field label={units === 'imperial' ? 'Weight (lb)' : 'Weight (kg)'}>
-        <TextInputField label="Weight" value={weight} onChangeText={setWeight} placeholder={units === 'imperial' ? '9.5' : '4.3'} keyboardType="decimal-pad" maxLength={7} />
+        <TextInputField label={tr('form.growth.weight')} value={weight} onChangeText={setWeight} placeholder={units === 'imperial' ? '9.5' : '4.3'} keyboardType="decimal-pad" maxLength={7} />
       </Field>
       <Field label={units === 'imperial' ? 'Length / height (in)' : 'Length / height (cm)'}>
-        <TextInputField label="Height" value={height} onChangeText={setHeight} placeholder={units === 'imperial' ? '22.4' : '57'} keyboardType="decimal-pad" maxLength={7} />
+        <TextInputField label={tr('form.growth.height')} value={height} onChangeText={setHeight} placeholder={units === 'imperial' ? '22.4' : '57'} keyboardType="decimal-pad" maxLength={7} />
       </Field>
       <Field label={units === 'imperial' ? 'Head circumference (in)' : 'Head circumference (cm)'}>
-        <TextInputField label="Head circumference" value={head} onChangeText={setHead} placeholder={units === 'imperial' ? '15.7' : '40'} keyboardType="decimal-pad" maxLength={7} />
+        <TextInputField label={tr('form.growth.head')} value={head} onChangeText={setHead} placeholder={units === 'imperial' ? '15.7' : '40'} keyboardType="decimal-pad" maxLength={7} />
       </Field>
-      <Field label="Note (optional)">
-        <TextInputField label="Growth note" value={note} onChangeText={setNote} maxLength={500} multiline />
+      <Field label={tr('form.noteOptional')}>
+        <TextInputField label={tr('form.growth.note')} value={note} onChangeText={setNote} maxLength={500} multiline />
       </Field>
       {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
-      <PrimaryButton label="Save measurement" onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
+      <PrimaryButton label={tr('form.growth.save')} onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
     </View>
   );
 }
@@ -364,6 +366,7 @@ export function MilestoneForm({
   canUsePhotos?: boolean;
 }) {
   const t = useTheme();
+  const { t: tr } = useI18n();
   const [title, setTitle] = useState(initial?.title ?? '');
   const [category, setCategory] = useState<MilestoneCategory>(initial?.category ?? 'motor');
   const [date, setDate] = useState(initial?.date ?? new Date().toISOString().slice(0, 10));
@@ -376,11 +379,11 @@ export function MilestoneForm({
 
   const save = () => {
     if (!title.trim()) {
-      setError('Describe the milestone.');
+      setError(tr('form.milestone.errTitle'));
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      setError('Date must be YYYY-MM-DD.');
+      setError(tr('form.err.date'));
       return;
     }
     onSave({
@@ -396,20 +399,20 @@ export function MilestoneForm({
 
   return (
     <View>
-      <SheetHeader title={initial ? 'Edit milestone' : 'Milestone or memory'} subtitle="A first smile, a rolled-over, anything worth keeping." onCancel={onCancel} />
-      <Field label="What happened">
-        <TextInputField label="Milestone" value={title} onChangeText={setTitle} placeholder="First laugh" maxLength={120} />
+      <SheetHeader title={initial ? tr('form.milestone.editTitle') : tr('form.milestone.newTitle')} subtitle={tr('form.milestone.subtitle')} onCancel={onCancel} />
+      <Field label={tr('form.milestone.what')}>
+        <TextInputField label={tr('form.milestone.label')} value={title} onChangeText={setTitle} placeholder="First laugh" maxLength={120} />
       </Field>
-      <Field label="Category">
-        <SegmentedControl label="Category" options={MILESTONE_CATEGORIES.filter((c) => c.value !== 'custom' && c.value !== 'feeding').concat([{ value: 'feeding', label: 'Feeding' }]).slice(0, 5)} value={category} onChange={setCategory} />
+      <Field label={tr('form.category')}>
+        <SegmentedControl label={tr('form.category')} options={MILESTONE_CATEGORIES.filter((c) => c.value !== 'custom' && c.value !== 'feeding').map((c) => ({ value: c.value, label: tr(`form.cat.${c.value}`) })).concat([{ value: 'feeding' as const, label: tr('form.cat.feeding') }]).slice(0, 5)} value={category} onChange={setCategory} />
       </Field>
-      <Field label="Date" hint="YYYY-MM-DD. Edit it later if you remember it differently.">
-        <TextInputField label="Date" value={date} onChangeText={setDate} maxLength={10} keyboardType="number-pad" />
+      <Field label={tr('form.date')} hint={tr('form.hint.dateEditable')}>
+        <TextInputField label={tr('form.date')} value={date} onChangeText={setDate} maxLength={10} keyboardType="number-pad" />
       </Field>
-      <Field label="Note (optional)">
-        <TextInputField label="Milestone note" value={note} onChangeText={setNote} maxLength={500} multiline />
+      <Field label={tr('form.noteOptional')}>
+        <TextInputField label={tr('form.milestone.note')} value={note} onChangeText={setNote} maxLength={500} multiline />
       </Field>
-      <Field label="Photo (optional)">
+      <Field label={tr('form.photoOptional')}>
         <PhotoSection
           previewUri={shownPhoto}
           canUsePhotos={canUsePhotos}
@@ -421,7 +424,7 @@ export function MilestoneForm({
         />
       </Field>
       {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
-      <PrimaryButton label={initial ? 'Save changes' : 'Save milestone'} onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
+      <PrimaryButton label={initial ? tr('form.saveChanges') : tr('form.milestone.save')} onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
     </View>
   );
 }
@@ -436,6 +439,7 @@ export function MedicationForm({
   onSave: (m: Omit<MedicationRecord, 'id' | 'babyId'>) => void;
 }) {
   const t = useTheme();
+  const { t: tr } = useI18n();
   const [name, setName] = useState('');
   const [instructions, setInstructions] = useState('');
   const [dose, setDose] = useState('');
@@ -445,14 +449,14 @@ export function MedicationForm({
 
   const save = () => {
     if (!name.trim()) {
-      setError('Enter the medication name.');
+      setError(tr('form.med.errName'));
       return;
     }
     let doseAmount: number | undefined;
     if (dose.trim()) {
       const n = Number(dose);
       if (Number.isNaN(n) || n < 0 || n > 1000) {
-        setError('Dose must be between 0 and 1000.');
+        setError(tr('form.med.errDose'));
         return;
       }
       doseAmount = n;
@@ -468,17 +472,17 @@ export function MedicationForm({
   return (
     <View>
       <SheetHeader
-        title="Medication"
-        subtitle="You enter names and doses yourself. The app records only — it never calculates or suggests doses."
+        title={tr('form.med.title')}
+        subtitle={tr('form.med.subtitle')}
         onCancel={onCancel}
       />
-      <Field label="Name">
+      <Field label={tr('form.baby.name')}>
         <TextInputField label="Medication name" value={name} onChangeText={setName} placeholder="Vitamin D drops" maxLength={80} />
       </Field>
-      <Field label="Prescribed instructions (as given to you)">
+      <Field label={tr('form.med.instructionsPrescribed')}>
         <TextInputField label="Instructions" value={instructions} onChangeText={setInstructions} placeholder="1 drop daily after feeding" maxLength={500} multiline />
       </Field>
-      <Field label="Dose (optional)">
+      <Field label={tr('form.med.doseOptional')}>
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
             <TextInputField label="Dose amount" value={dose} onChangeText={setDose} placeholder="0.5" keyboardType="decimal-pad" maxLength={7} />
@@ -498,11 +502,11 @@ export function MedicationForm({
           </View>
         </View>
       </Field>
-      <Field label="Notes (optional)">
+      <Field label={tr('form.notesOptional')}>
         <TextInputField label="Medication notes" value={notes} onChangeText={setNotes} maxLength={500} multiline />
       </Field>
       {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
-      <PrimaryButton label="Save medication" onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
+      <PrimaryButton label={tr('form.med.save')} onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
     </View>
   );
 }
@@ -517,6 +521,7 @@ export function VaccinationForm({
   onSave: (v: Omit<VaccinationRecord, 'id' | 'babyId'>) => void;
 }) {
   const t = useTheme();
+  const { t: tr } = useI18n();
   const [name, setName] = useState('');
   const [dateGiven, setDateGiven] = useState(new Date().toISOString().slice(0, 10));
   const [nextAppointment, setNextAppointment] = useState('');
@@ -526,15 +531,15 @@ export function VaccinationForm({
 
   const save = () => {
     if (!name.trim()) {
-      setError('Enter the vaccine name.');
+      setError(tr('form.vax.errName'));
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateGiven)) {
-      setError('Date given must be YYYY-MM-DD.');
+      setError(tr('form.vax.errDateGiven'));
       return;
     }
     if (nextAppointment.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(nextAppointment.trim())) {
-      setError('Next appointment must be YYYY-MM-DD.');
+      setError(tr('form.vax.errNext'));
       return;
     }
     onSave({
@@ -549,27 +554,27 @@ export function VaccinationForm({
   return (
     <View>
       <SheetHeader
-        title="Vaccination record"
+        title={tr('form.vax.title')}
         subtitle="Record what was given. The app does not advise on schedules."
         onCancel={onCancel}
       />
-      <Field label="Vaccine name">
+      <Field label={tr('form.vax.name')}>
         <TextInputField label="Vaccine name" value={name} onChangeText={setName} placeholder="Hepatitis B" maxLength={120} />
       </Field>
-      <Field label="Date given" hint="YYYY-MM-DD.">
+      <Field label="Date given" hint={tr('form.hint.date')}>
         <TextInputField label="Date given" value={dateGiven} onChangeText={setDateGiven} maxLength={10} keyboardType="number-pad" />
       </Field>
-      <Field label="Next appointment (optional)" hint="YYYY-MM-DD.">
+      <Field label="Next appointment (optional)" hint={tr('form.hint.date')}>
         <TextInputField label="Next appointment" value={nextAppointment} onChangeText={setNextAppointment} maxLength={10} keyboardType="number-pad" />
       </Field>
-      <Field label="Provider (optional)">
+      <Field label={tr('form.vax.providerOptional')}>
         <TextInputField label="Provider" value={provider} onChangeText={setProvider} placeholder="Clinic name" maxLength={120} />
       </Field>
-      <Field label="Notes (optional)">
+      <Field label={tr('form.notesOptional')}>
         <TextInputField label="Vaccination notes" value={notes} onChangeText={setNotes} maxLength={500} multiline />
       </Field>
       {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
-      <PrimaryButton label="Save vaccination" onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
+      <PrimaryButton label={tr('form.vax.save')} onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
     </View>
   );
 }
@@ -592,6 +597,7 @@ export function RoutineForm({
   onSave: (r: Omit<RoutineTemplate, 'id' | 'babyId'>) => void;
 }) {
   const t = useTheme();
+  const { t: tr } = useI18n();
   const [title, setTitle] = useState('');
   const [kind, setKind] = useState<RoutineKind>('feed');
   const [timeOfDay, setTimeOfDay] = useState('07:00');
@@ -604,15 +610,15 @@ export function RoutineForm({
 
   const save = () => {
     if (!title.trim()) {
-      setError('Name the routine.');
+      setError(tr('form.routine.errName'));
       return;
     }
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(timeOfDay.trim())) {
-      setError('Time must be HH:mm (24-hour), e.g. 07:30.');
+      setError(tr('form.routine.errTime'));
       return;
     }
     if (days.length === 0) {
-      setError('Pick at least one day.');
+      setError(tr('form.routine.errDays'));
       return;
     }
     onSave({
@@ -628,19 +634,19 @@ export function RoutineForm({
     <View>
       <SheetHeader
         title="Daily routine"
-        subtitle="Templates remind you — they never create journal entries by themselves."
+        subtitle={tr('form.routine.subtitle')}
         onCancel={onCancel}
       />
-      <Field label="Name">
+      <Field label={tr('form.baby.name')}>
         <TextInputField label="Routine name" value={title} onChangeText={setTitle} placeholder="Morning feed" maxLength={80} />
       </Field>
-      <Field label="Type">
+      <Field label={tr('form.vax.type')}>
         <SegmentedControl label="Type" options={ROUTINE_KINDS} value={kind} onChange={setKind} />
       </Field>
-      <Field label="Time of day" hint="24-hour HH:mm, your local time.">
+      <Field label="Time of day" hint={tr('form.routine.timeHint')}>
         <TextInputField label="Time of day" value={timeOfDay} onChangeText={setTimeOfDay} maxLength={5} keyboardType="number-pad" />
       </Field>
-      <Field label="Days">
+      <Field label={tr('form.routine.days')}>
         <View style={styles.daysRow}>
           {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, idx) => {
             const on = days.includes(idx);
@@ -660,7 +666,7 @@ export function RoutineForm({
         </View>
       </Field>
       {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
-      <PrimaryButton label="Save routine" onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
+      <PrimaryButton label={tr('form.routine.save')} onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
     </View>
   );
 }
