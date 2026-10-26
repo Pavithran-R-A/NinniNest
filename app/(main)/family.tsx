@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -55,7 +56,7 @@ export default function FamilyScreen() {
   const {
     currentBaby, data, isDemo, addBaby, updateBaby, deleteBaby,
     addGrowthRecord, deleteGrowthRecord,
-    addMilestone, deleteMilestone,
+    addMilestone, updateMilestone, deleteMilestone,
     addMedication, deleteMedication,
     addMedicationAdministration, deleteMedicationAdministration,
     addVaccination, deleteVaccination,
@@ -67,11 +68,13 @@ export default function FamilyScreen() {
   const [tab, setTab] = useState<FamilyTab>('profiles');
   const [sheet, setSheet] = useState<string | null>(null);
   const [editingBaby, setEditingBaby] = useState<Baby | null>(null);
+  const [editingMilestone, setEditingMilestone] = useState<MilestoneRecord | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const closeSheet = () => {
     setSheet(null);
     setEditingBaby(null);
+    setEditingMilestone(null);
     setSaveError(null);
   };
 
@@ -291,6 +294,10 @@ export default function FamilyScreen() {
           <MilestonesPanel
             records={babyMilestones}
             onNew={() => setSheet('milestone')}
+            onEdit={(m) => {
+              setEditingMilestone(m);
+              setSheet('milestone');
+            }}
             onDelete={(id) => confirmDelete('milestone', () => deleteMilestone(id))}
           />
         )}
@@ -397,10 +404,35 @@ export default function FamilyScreen() {
             )}
             {sheet === 'milestone' && currentBaby && (
               <MilestoneForm
+                initial={editingMilestone ?? undefined}
                 canUsePhotos={!isDemo}
                 onCancel={closeSheet}
                 onSave={async (m) => {
-                  const { pendingPhotoUri: _pending, ...fields } = m;
+                  const { pendingPhotoUri: _pending, removePhoto, id, ...fields } = m;
+                  if (id && editingMilestone) {
+                    // Edit: previous photo file survives a failed save; the
+                    // replaced/removed file is reclaimed only after commit.
+                    const milestone: MilestoneRecord = {
+                      ...editingMilestone,
+                      ...fields,
+                    };
+                    runPhotoSave(
+                      await persistRecordWithPhoto(
+                        photoIo,
+                        {
+                          record: milestone,
+                          babyId: currentBaby.id,
+                          pendingPhotoUri: _pending,
+                          removePhoto,
+                          previousPhotoUri: editingMilestone.photoUri,
+                          isNew: false,
+                        },
+                        (rec) => updateMilestone(rec)
+                      ),
+                      () => closeSheet()
+                    );
+                    return;
+                  }
                   const milestone: MilestoneRecord = {
                     ...fields,
                     id: crypto.randomUUID(),
@@ -621,10 +653,11 @@ function GrowthPanel({
 }
 
 function MilestonesPanel({
-  records, onNew, onDelete,
+  records, onNew, onEdit, onDelete,
 }: {
   records: MilestoneRecord[];
   onNew: () => void;
+  onEdit: (m: MilestoneRecord) => void;
   onDelete: (id: string) => void;
 }) {
   const t = useTheme();
@@ -660,9 +693,18 @@ function MilestonesPanel({
           renderItem={({ item }) => (
             <View style={[styles.card, { backgroundColor: t.surface, borderColor: t.hairline }]}>
               <View style={styles.cardTopRow}>
-                <View style={[styles.avatar, { backgroundColor: t.accentSoft }]}>
-                  <Star size={18} color={t.accent} strokeWidth={2} />
-                </View>
+                {item.photoUri ? (
+                  <Image
+                    source={{ uri: item.photoUri }}
+                    style={styles.milestoneThumb}
+                    accessibilityLabel="Milestone photo"
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.avatar, { backgroundColor: t.accentSoft }]}>
+                    <Star size={18} color={t.accent} strokeWidth={2} />
+                  </View>
+                )}
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.cardTitle, { color: t.ink }]}>{item.title}</Text>
                   <Text style={[styles.cardDetail, { color: t.inkMuted }]}>
@@ -670,6 +712,9 @@ function MilestonesPanel({
                     {item.note ? ` — ${item.note}` : ''}
                   </Text>
                 </View>
+                <Pressable onPress={() => onEdit(item)} accessibilityRole="button" accessibilityLabel="Edit milestone" style={styles.iconBtn}>
+                  <Pencil size={16} color={t.accent} strokeWidth={2} />
+                </Pressable>
                 <Pressable onPress={() => onDelete(item.id)} accessibilityRole="button" accessibilityLabel="Delete milestone" style={styles.iconBtn}>
                   <Trash2 size={16} color={t.cinnamon} strokeWidth={2} />
                 </Pressable>
@@ -931,11 +976,16 @@ const styles = StyleSheet.create({
     marginTop: spacing(1.5),
   },
   adminText: { fontSize: 12, fontVariant: ['tabular-nums'] },
+  milestoneThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.sm,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+  },
   iconBtn: {
     width: 44,
     height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center',    justifyContent: 'center',
   },
   addCard: {
     minHeight: 56,

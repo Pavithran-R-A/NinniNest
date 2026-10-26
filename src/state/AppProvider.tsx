@@ -76,6 +76,7 @@ interface AppContextValue {
   addGrowthRecord: (g: GrowthRecord) => Promise<boolean>;
   deleteGrowthRecord: (id: string) => Promise<boolean>;
   addMilestone: (m: MilestoneRecord) => Promise<boolean>;
+  updateMilestone: (m: MilestoneRecord) => Promise<boolean>;
   deleteMilestone: (id: string) => Promise<boolean>;
   addMedication: (m: MedicationRecord) => Promise<boolean>;
   deleteMedication: (id: string) => Promise<boolean>;
@@ -583,6 +584,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addGrowthRecord: growthCrud.addFn,
     deleteGrowthRecord: growthCrud.deleteFn,
     addMilestone: milestoneCrud.addFn,
+    updateMilestone: milestoneCrud.addFn, // INSERT OR REPLACE keyed by id
     deleteMilestone,
     addMedication: medicationCrud.addFn,
     deleteMedication: medicationCrud.deleteFn,

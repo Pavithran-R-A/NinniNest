@@ -27,3 +27,16 @@ jobs:
 
       - name: Expo web export
         run: npx expo export --platform web
+
+      - name: Dependency security report (explicit severities)
+        run: |
+          echo "::group::Runtime dependencies (production) audit"
+          npm audit --omit=dev --json > runtime-audit.json || true
+          node -e "const j=require('./runtime-audit.json');const v=j.metadata.vulnerabilities;console.log('runtime vulnerabilities:',JSON.stringify(v));process.exitCode=(v.critical>0?1:0)"
+          echo "::endgroup::"
+          echo "::group::Full tree audit (dev tooling included, reported not blocking)"
+          npm audit || true
+          echo "::endgroup::"
+
+      - name: Expo dependency compatibility
+        run: npx expo-doctor || echo "expo-doctor findings are informational; see job log"

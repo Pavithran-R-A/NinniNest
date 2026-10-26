@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## 0.9.0 — 2026-10-26 (reproducible Android builds; milestone editing; import bounds)
+
+### Added
+- **Milestone editing**: title, date, category and notes are editable; the
+  photo can be replaced or removed with the same durability ordering as
+  creation (previous file survives a failed save; replaced/removed files are
+  reclaimed only after the commit). Milestone cards gain an edit action and a
+  photo thumbnail.
+- **Versioned Android NDK configuration** (`plugins/withNdkVersion`, wired in
+  app.json): a clean checkout now reproduces the native build — prebuild pins
+  `rootProject.ext.ndkVersion = 27.1.12297006` (the exact NDK React Native
+  0.86.3 declares) so every library module resolves the same toolchain.
+  Verified twice from a clean temporary checkout (idempotent across
+  `prebuild --clean` reruns). Previously the fix lived only in the untracked
+  generated `android/` folder and was lost on every regeneration.
+- **Bounded backup imports** (untrusted-input hardening): plan-time limits on
+  JSON size (300 MB cap ≈ 12× the measured 100-photo envelope) and per-
+  collection record counts, checked before parsing/validation — an
+  adversarial or accidentally huge file can no longer exhaust memory (the
+  installed zod 4.6.7 is the newest 4.x and carries a known oversized-
+  collection advisory; bounding input is the mitigation). 5 tests.
+- `expo-notifications` plugin mode switched from `expo-push-notifications`
+  (remote push infrastructure) to `broadcast` (local scheduled reminders
+  only) — a local-first app should not declare push capabilities.
+- GitHub Actions: `android-qa-build` workflow producing an installable
+  debug-signed QA APK artifact from the exact pushed SHA; CI gains explicit
+  dependency-security severity reporting and minimally scoped permissions.
+
+### Verification
+- Full suite: **260/260 (23 files)** · strict typecheck exit 0.
+
 ## 0.8.0 — 2026-10-26 (final completion mission — product gaps closed)
 
 ### Added

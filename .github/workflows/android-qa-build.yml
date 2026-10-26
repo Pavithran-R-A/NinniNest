@@ -1,0 +1,62 @@
+name: android-qa-build
+
+# Produces an installable debug-signed QA APK from the exact pushed commit on
+# GitHub's free ubuntu runners. Debug signing only — never production keys.
+
+on:
+  push:
+    branches:
+      - release/ninninest-safety-zcode-20261026
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+
+      - name: Generate native project (versioned config plugins)
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Build QA APK (debug signing)
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --console=plain
+
+      - name: Locate APK and record provenance
+        id: apk
+        run: |
+          APK=$(find app/build/outputs/apk -name "*.apk" | head -1)
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$APK")" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "$APK" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "APK: $APK"
+          echo "SHA-256: $(sha256sum "$APK" | cut -d' ' -f1)"
+          AAPT=$(ls "$ANDROID_HOME/build-tools"/*/aapt2 | sort | tail -1)
+          "$AAPT" dump badging "$APK" | head -3
+
+      - name: Upload QA APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ninninest-qa-apk-${{ github.sha }}
+          path: android/${{ steps.apk.outputs.path }}
+          retention-days: 7
+          if-no-files-found: error

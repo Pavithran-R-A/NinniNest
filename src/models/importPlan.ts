@@ -32,6 +32,35 @@ export interface ImportPlan {
   photos: EmbeddedPhoto[];
 }
 
+/**
+ * Hard import bounds. A backup is untrusted input: these caps sit BEFORE
+ * JSON.parse and record validation so an adversarial or accidentally huge
+ * file cannot exhaust memory (the installed zod 4.6.7 is the newest 4.x and
+ * carries a known oversized-collection advisory — bounding the input is the
+ * mitigation, not a zod upgrade).
+ *
+ * Envelope evidence: a 100-photo backup measures ≈25 MB (tests/backupSize).
+ * 300 MB ≈ a twelve-fold margin above any plausible real journal.
+ */
+export const IMPORT_LIMITS = {
+  /** Maximum JSON text length accepted for parsing. */
+  maxJsonChars: 300 * 1024 * 1024,
+  /** Maximum records per collection in one backup file. */
+  maxPerCollection: {
+    babies: 100,
+    events: 200_000,
+    activeTimers: 100,
+    growthRecords: 10_000,
+    milestones: 10_000,
+    medications: 2_000,
+    medicationAdministrations: 100_000,
+    vaccinations: 1_000,
+    routines: 1_000,
+  } as const,
+  /** Maximum embedded photo entries (bytes-bearing or not). */
+  maxEmbeddedPhotos: 5_000,
+} as const;
+
 // Strict import planning. Nothing here writes; malformed, duplicate and orphaned
 // records are hard errors — a backup that cannot be fully honoured is rejected,
 // never silently trimmed.
@@ -42,6 +71,14 @@ export function planImport(json: string, current: AppData, mode: ImportMode): Im
     administrations: 0, vaccinations: 0, routines: 0,
   };
   const fail = (): ImportPlan => ({ ok: false, issues, counts, mode, target: null, photos: [] });
+
+  if (json.length > IMPORT_LIMITS.maxJsonChars) {
+    issues.push({
+      severity: 'error',
+      message: 'This file is far larger than any backup NinniNest can produce. The import was stopped to protect your device.',
+    });
+    return fail();
+  }
 
   let obj: Record<string, unknown>;
   try {
@@ -69,6 +106,34 @@ export function planImport(json: string, current: AppData, mode: ImportMode): Im
   const data = obj.data as Partial<AppData> | undefined;
   if (!data || !Array.isArray(data.babies) || !Array.isArray(data.events)) {
     issues.push({ severity: 'error', message: 'The backup is missing its core records.' });
+    return fail();
+  }
+
+  // Collection bounds are checked on the RAW arrays before any validation so
+  // an oversized archive fails fast instead of exercising the validators.
+  const oversize: string[] = [];
+  const checkCount = (label: string, arr: unknown, key: keyof typeof IMPORT_LIMITS.maxPerCollection) => {
+    if (Array.isArray(arr) && arr.length > IMPORT_LIMITS.maxPerCollection[key]) {
+      oversize.push(`${arr.length} ${label} (limit ${IMPORT_LIMITS.maxPerCollection[key]})`);
+    }
+  };
+  checkCount('baby profile(s)', data.babies, 'babies');
+  checkCount('journal event(s)', data.events, 'events');
+  checkCount('active timer(s)', data.activeTimers, 'activeTimers');
+  checkCount('growth record(s)', data.growthRecords, 'growthRecords');
+  checkCount('milestone(s)', data.milestones, 'milestones');
+  checkCount('medication(s)', data.medications, 'medications');
+  checkCount('recorded dose(s)', data.medicationAdministrations, 'medicationAdministrations');
+  checkCount('vaccination(s)', data.vaccinations, 'vaccinations');
+  checkCount('routine(s)', data.routines, 'routines');
+  if (Array.isArray(obj.photosEmbedded) && obj.photosEmbedded.length > IMPORT_LIMITS.maxEmbeddedPhotos) {
+    oversize.push(`${obj.photosEmbedded.length} embedded photo(s) (limit ${IMPORT_LIMITS.maxEmbeddedPhotos})`);
+  }
+  if (oversize.length) {
+    issues.push({
+      severity: 'error',
+      message: `This backup exceeds what one journal can hold: ${oversize.join(', ')}. The import was stopped to protect your device.`,
+    });
     return fail();
   }
 

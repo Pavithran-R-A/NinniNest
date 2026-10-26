@@ -349,21 +349,30 @@ const MILESTONE_CATEGORIES: { value: MilestoneCategory; label: string }[] = [
 ];
 
 export function MilestoneForm({
+  initial,
   onCancel,
   onSave,
   canUsePhotos = true,
 }: {
+  initial?: MilestoneRecord;
   onCancel: () => void;
-  onSave: (m: Omit<MilestoneRecord, 'id' | 'babyId'> & { pendingPhotoUri?: string }) => void;
+  onSave: (m: Omit<MilestoneRecord, 'id' | 'babyId'> & {
+    pendingPhotoUri?: string;
+    removePhoto?: boolean;
+    id?: string;
+  }) => void;
   canUsePhotos?: boolean;
 }) {
   const t = useTheme();
-  const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<MilestoneCategory>('motor');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [note, setNote] = useState('');
+  const [title, setTitle] = useState(initial?.title ?? '');
+  const [category, setCategory] = useState<MilestoneCategory>(initial?.category ?? 'motor');
+  const [date, setDate] = useState(initial?.date ?? new Date().toISOString().slice(0, 10));
+  const [note, setNote] = useState(initial?.note ?? '');
   const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const shownPhoto = removePhoto ? null : pendingPhotoUri ?? initial?.photoUri ?? null;
 
   const save = () => {
     if (!title.trim()) {
@@ -375,17 +384,19 @@ export function MilestoneForm({
       return;
     }
     onSave({
+      ...(initial ? { id: initial.id } : {}),
       title: title.trim(),
       category,
       date,
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(pendingPhotoUri ? { pendingPhotoUri } : {}),
+      ...(removePhoto && initial?.photoUri ? { removePhoto: true } : {}),
     });
   };
 
   return (
     <View>
-      <SheetHeader title="Milestone or memory" subtitle="A first smile, a rolled-over, anything worth keeping." onCancel={onCancel} />
+      <SheetHeader title={initial ? 'Edit milestone' : 'Milestone or memory'} subtitle="A first smile, a rolled-over, anything worth keeping." onCancel={onCancel} />
       <Field label="What happened">
         <TextInputField label="Milestone" value={title} onChangeText={setTitle} placeholder="First laugh" maxLength={120} />
       </Field>
@@ -400,14 +411,17 @@ export function MilestoneForm({
       </Field>
       <Field label="Photo (optional)">
         <PhotoSection
-          previewUri={pendingPhotoUri}
+          previewUri={shownPhoto}
           canUsePhotos={canUsePhotos}
           previewLabel="Milestone photo preview"
-          onChange={(uri) => setPendingPhotoUri(uri)}
+          onChange={(uri) => {
+            setRemovePhoto(uri === null);
+            setPendingPhotoUri(uri);
+          }}
         />
       </Field>
       {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
-      <PrimaryButton label="Save milestone" onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
+      <PrimaryButton label={initial ? 'Save changes' : 'Save milestone'} onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
     </View>
   );
 }
