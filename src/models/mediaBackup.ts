@@ -118,16 +118,208 @@ export interface MediaPort {
   }): Promise<void>;
   /** Move staged files into their final managed locations. key -> final uri. */
   promoteAll(): Promise<Map<string, string>>;
-  /** Delete every file this import created (staged and promoted). */
-  rollback(): Promise<void>;
+  /**
+   * Delete every file this import created (staged and promoted). Returns the
+   * number of files that could NOT be removed — a nonzero value means the
+   * caller must tell the user cleanup was incomplete.
+   */
+  rollback(): Promise<number>;
   /** Whether a URI points into this device's managed media root. */
   isManagedUri(uri: string): boolean;
+  /** Baby-id directories directly under the managed root (never .staging). */
+  listManagedBabyIds(): Promise<string[]>;
+  /** Remove unreferenced files from one baby's managed directory. */
+  cleanupBabyFiles(
+    babyId: string,
+    referencedUris: Set<string>
+  ): Promise<{ removed: number; failures: number }>;
+  /** Remove one baby's whole directory (a profile the user erased via replace). */
+  deleteBabyDirectory(babyId: string): Promise<number>;
+}
+
+/**
+ * The primitives the port state machine needs from a filesystem. The native
+ * expo-file-system runtime supplies one implementation; tests supply fakes
+ * with failure injection and run the REAL state machine.
+ */
+export interface MediaPortIo {
+  nowMs(): number;
+  randomId(): string;
+  joinPath(base: string, name: string): string;
+  baseName(path: string): string;
+  ensureDir(path: string): Promise<void>;
+  writeFile(path: string, bytes: Uint8Array): Promise<void>;
+  copyFile(src: string, dest: string): Promise<void>;
+  removeFile(path: string): Promise<void>;
+  fileExists(path: string): Promise<boolean>;
+  listChildDirs(base: string): Promise<string[]>;
+  listChildFiles(base: string): Promise<string[]>;
+  removeTree(path: string): Promise<void>;
+  rootPath(): string;
+  stagingPath(): string;
 }
 
 function safeFileName(name: string): string {
-  const base = (name.split(/[\\/]/).pop() ?? '').replace(/^\.+/, '').trim();
+  const base = (name.split(/[\\/]/).pop() ?? '')
+    .replace(/^\.+/, '')
+    .replace(/[. ]+$/, '')
+    .trim();
   if (!base || base === '..' || base.length > 120) return `photo-${Date.now()}.jpg`;
   return base;
+}
+
+/** One path segment (a baby id) — never lets separators or dots through. */
+function safeSegment(id: string): string {
+  const seg = (id.split(/[\\/]/).pop() ?? '').replace(/^\.+/, '').trim();
+  return seg && seg !== '..' ? seg : 'unknown';
+}
+
+/**
+ * The staging/promotion/rollback state machine shared by every platform. All
+ * fallible operations follow two rules:
+ *   1. a file is tracked for rollback BEFORE the operation that creates it;
+ *   2. only files this import created are ever removed.
+ */
+export function createManagedMediaPort(io: MediaPortIo): MediaPort {
+  let staged: Array<{ key: string; owner: string; name: string; path: string }> = [];
+  let promoted: string[] = [];
+
+  const tryRemove = async (path: string): Promise<boolean> => {
+    try {
+      await io.removeFile(path);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  return {
+    async wipeStaging() {
+      try {
+        await io.removeTree(io.stagingPath());
+      } catch {
+        // nothing to sweep or sweep blocked; the next import retries
+      }
+      staged = [];
+      promoted = [];
+    },
+    async stage({ key, ownerBabyId, base64, fileName }) {
+      const owner = safeSegment(ownerBabyId);
+      const name = safeFileName(fileName);
+      const path = io.joinPath(io.stagingPath(), `${io.nowMs()}-${io.randomId()}-${name}`);
+      // Track BEFORE the fallible write: a partial write must still be
+      // reachable by rollback() (and by the next wipeStaging()).
+      staged.push({ key, owner, name, path });
+      await io.ensureDir(io.stagingPath());
+      await io.writeFile(path, base64ToBytes(base64));
+    },
+    async promoteAll() {
+      const out = new Map<string, string>();
+      for (const s of staged) {
+        const dir = io.joinPath(io.rootPath(), s.owner);
+        await io.ensureDir(dir);
+        const dest = io.joinPath(dir, `${io.nowMs()}-${io.randomId()}-${s.name}`);
+        await io.copyFile(s.path, dest);
+        promoted.push(dest); // track the new copy before removing the staged one
+        await tryRemove(s.path);
+        out.set(s.key, dest);
+      }
+      staged = [];
+      return out;
+    },
+    async rollback() {
+      let failures = 0;
+      for (const s of staged) if (!(await tryRemove(s.path))) failures += 1;
+      for (const dest of promoted) if (!(await tryRemove(dest))) failures += 1;
+      staged = [];
+      promoted = [];
+      return failures;
+    },
+    isManagedUri(uri) {
+      return uri.startsWith(io.rootPath());
+    },
+    async listManagedBabyIds() {
+      try {
+        const dirs = await io.listChildDirs(io.rootPath());
+        return dirs
+          .map((d) => io.baseName(d))
+          .filter((n) => n !== STAGING_DIR_NAME && n !== '' && n !== '..');
+      } catch {
+        return [];
+      }
+    },
+    async cleanupBabyFiles(babyId, referencedUris) {
+      const id = safeSegment(babyId);
+      let removed = 0;
+      let failures = 0;
+      try {
+        const dir = io.joinPath(io.rootPath(), id);
+        const files = await io.listChildFiles(dir);
+        for (const f of files) {
+          if (referencedUris.has(f)) continue;
+          if (await tryRemove(f)) removed += 1;
+          else failures += 1;
+        }
+      } catch {
+        failures += 1;
+      }
+      return { removed, failures };
+    },
+    async deleteBabyDirectory(babyId) {
+      const id = safeSegment(babyId);
+      let failures = 0;
+      try {
+        const dir = io.joinPath(io.rootPath(), id);
+        const files = await io.listChildFiles(dir);
+        for (const f of files) if (!(await tryRemove(f))) failures += 1;
+        await io.removeTree(dir);
+      } catch {
+        failures += 1;
+      }
+      return failures;
+    },
+  };
+}
+
+function nativeIo(): MediaPortIo {
+  const root = new Directory(Paths.document, MEDIA_ROOT_NAME);
+  const staging = new Directory(root, STAGING_DIR_NAME);
+  return {
+    nowMs: () => Date.now(),
+    randomId: () => crypto.randomUUID(),
+    joinPath: (base, name) => `${base}/${name}`,
+    baseName: (p) => p.split('/').pop() ?? p,
+    ensureDir: async (path) => {
+      new Directory(path).create({ intermediates: true, idempotent: true });
+    },
+    writeFile: async (path, bytes) => {
+      await new File(path).write(bytes);
+    },
+    copyFile: async (src, dest) => {
+      await new File(src).copy(new File(dest));
+    },
+    removeFile: async (path) => {
+      const f = new File(path);
+      if (f.exists) f.delete();
+    },
+    fileExists: async (path) => new File(path).exists,
+    listChildDirs: async (base) => {
+      const d = new Directory(base);
+      if (!d.exists) return [];
+      return d.list().filter((e): e is Directory => e instanceof Directory).map((e) => e.uri);
+    },
+    listChildFiles: async (base) => {
+      const d = new Directory(base);
+      if (!d.exists) return [];
+      return d.list().filter((e): e is File => e instanceof File).map((e) => e.uri);
+    },
+    removeTree: async (path) => {
+      const d = new Directory(path);
+      if (d.exists) d.delete();
+    },
+    rootPath: () => root.uri,
+    stagingPath: () => staging.uri,
+  };
 }
 
 export function createMediaPort(): MediaPort {
@@ -140,67 +332,24 @@ export function createMediaPort(): MediaPort {
       async promoteAll() {
         return new Map();
       },
-      async rollback() {},
+      async rollback() {
+        return 0;
+      },
       isManagedUri() {
         return false;
       },
+      async listManagedBabyIds() {
+        return [];
+      },
+      async cleanupBabyFiles() {
+        return { removed: 0, failures: 0 };
+      },
+      async deleteBabyDirectory() {
+        return 0;
+      },
     };
   }
-  const root = new Directory(Paths.document, MEDIA_ROOT_NAME);
-  const staging = new Directory(root, STAGING_DIR_NAME);
-  let stagedFiles: Array<{ key: string; file: File; ownerBabyId: string; name: string }> = [];
-  let promotedUris: string[] = [];
-
-  const removeQuietly = (f: File) => {
-    try {
-      if (f.exists) f.delete();
-    } catch {
-      // best-effort cleanup; the database invariant is what matters
-    }
-  };
-
-  return {
-    async wipeStaging() {
-      try {
-        if (staging.exists) staging.delete();
-      } catch {
-        // nothing to sweep or sweep blocked; next import retries
-      }
-      stagedFiles = [];
-      promotedUris = [];
-    },
-    async stage({ key, ownerBabyId, base64, fileName }) {
-      const bytes = base64ToBytes(base64);
-      const name = safeFileName(fileName);
-      const file = new File(staging, `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${name}`);
-      staging.create({ intermediates: true, idempotent: true });
-      await file.write(bytes);
-      stagedFiles.push({ key, file, ownerBabyId, name });
-    },
-    async promoteAll() {
-      const out = new Map<string, string>();
-      for (const entry of stagedFiles) {
-        const dir = new Directory(root, entry.ownerBabyId || 'unknown');
-        dir.create({ intermediates: true, idempotent: true });
-        const dest = new File(dir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${entry.name}`);
-        await entry.file.copy(dest);
-        removeQuietly(entry.file);
-        promotedUris.push(dest.uri);
-        out.set(entry.key, dest.uri);
-      }
-      stagedFiles = [];
-      return out;
-    },
-    async rollback() {
-      for (const { file } of stagedFiles) removeQuietly(file);
-      for (const uri of promotedUris) removeQuietly(new File(uri));
-      stagedFiles = [];
-      promotedUris = [];
-    },
-    isManagedUri(uri: string) {
-      return uri.startsWith(root.uri);
-    },
-  };
+  return createManagedMediaPort(nativeIo());
 }
 
 /**

@@ -41,9 +41,57 @@ export interface StagedRestoreResult {
   restoredPhotos: number;
   /** Photo references the backup could not satisfy (no bytes / foreign URI). */
   failedPhotos: number;
+  /** Files the rollback could not delete (attention needed; records are safe). */
+  cleanupFailures: number;
+  /** The database commit succeeded but the UI refresh failed. */
+  refreshFailed: boolean;
 }
 
 const keyOf = (recordId: string, field: string): string => `${recordId}:${field}`;
+
+/**
+ * Post-commit media hygiene. A replace import orphans every file the previous
+ * records referenced; without this sweep they would sit on disk forever (the
+ * per-baby cleanup was never wired to any caller before Stage 2B — a real
+ * defect this function closes for the import path). Strictly scoped:
+ *   - per-baby sweeps touch only directories of babies IN the committed target;
+ *   - whole-directory removal only applies to profiles the user explicitly
+ *     erased via a confirmed replace (present before, absent in the target);
+ *   - .staging and anything unrecognised is never touched.
+ * Returns the number of files that could not be removed.
+ */
+async function cleanupImportMedia(
+  media: MediaPort,
+  opts: { mode: ImportPlan['mode']; target: AppData; current?: AppData }
+): Promise<number> {
+  if (opts.mode !== 'replace') return 0; // merge removes no records, orphans no files
+  const referencedByBaby = new Map<string, Set<string>>();
+  for (const b of opts.target.babies) {
+    const set = referencedByBaby.get(b.id) ?? new Set<string>();
+    if (b.photoUri) set.add(b.photoUri);
+    referencedByBaby.set(b.id, set);
+  }
+  for (const m of opts.target.milestones) {
+    const set = referencedByBaby.get(m.babyId) ?? new Set<string>();
+    if (m.photoUri) set.add(m.photoUri);
+    referencedByBaby.set(m.babyId, set);
+  }
+  let failures = 0;
+  for (const [babyId, refs] of referencedByBaby) {
+    const r = await media.cleanupBabyFiles(babyId, refs).catch(() => ({ removed: 0, failures: 1 }));
+    failures += r.failures;
+  }
+  // Directories of profiles the replace erased: present on this device before
+  // the user confirmed the replace, absent from the imported target.
+  const targetIds = new Set(opts.target.babies.map((b) => b.id));
+  const erased = (opts.current?.babies ?? [])
+    .map((b) => b.id)
+    .filter((id) => !targetIds.has(id));
+  for (const id of erased) {
+    failures += await media.deleteBabyDirectory(id).catch(() => 1);
+  }
+  return failures;
+}
 
 export async function runStagedBackupImport(
   repo: { replaceAll(data: AppData): Promise<void> },
@@ -51,7 +99,7 @@ export async function runStagedBackupImport(
   deps: { media: MediaPort; refresh?: () => Promise<void>; current?: AppData }
 ): Promise<StagedRestoreResult> {
   if (!plan.ok || !plan.target) {
-    return { ok: false, outcome: 'validation-failed', restoredPhotos: 0, failedPhotos: 0 };
+    return { ok: false, outcome: 'validation-failed', restoredPhotos: 0, failedPhotos: 0, cleanupFailures: 0, refreshFailed: false };
   }
 
   // Recovery sweep: debris from an interrupted earlier import is never
@@ -89,8 +137,8 @@ export async function runStagedBackupImport(
       });
     }
   } catch {
-    await deps.media.rollback().catch(() => {});
-    return { ok: false, outcome: 'storage-failed', restoredPhotos: 0, failedPhotos: plan.photos.length };
+    const cleanupFailures = await deps.media.rollback().catch(() => 1);
+    return { ok: false, outcome: 'storage-failed', restoredPhotos: 0, failedPhotos: plan.photos.length, cleanupFailures, refreshFailed: false };
   }
 
   // 3b. Promote into final managed locations — still before the DB commit.
@@ -98,8 +146,8 @@ export async function runStagedBackupImport(
   try {
     uriByKey = await deps.media.promoteAll();
   } catch {
-    await deps.media.rollback().catch(() => {});
-    return { ok: false, outcome: 'storage-failed', restoredPhotos: 0, failedPhotos: plan.photos.length };
+    const cleanupFailures = await deps.media.rollback().catch(() => 1);
+    return { ok: false, outcome: 'storage-failed', restoredPhotos: 0, failedPhotos: plan.photos.length, cleanupFailures, refreshFailed: false };
   }
 
   // Remap records onto the promoted files, and handle references the backup
@@ -130,15 +178,25 @@ export async function runStagedBackupImport(
   try {
     await repo.replaceAll(restored);
   } catch {
-    await deps.media.rollback().catch(() => {});
-    return { ok: false, outcome: 'rolled-back', restoredPhotos: 0, failedPhotos: plan.photos.length };
+    const cleanupFailures = await deps.media.rollback().catch(() => 1);
+    return { ok: false, outcome: 'rolled-back', restoredPhotos: 0, failedPhotos: plan.photos.length, cleanupFailures, refreshFailed: false };
   }
 
+  let refreshFailed = false;
   try {
     await deps.refresh?.();
   } catch {
-    // refresh failure must not turn a committed import into a reported failure
+    // refresh failure must not turn a committed import into a reported failure,
+    // but the user must be told their lists may look stale.
+    refreshFailed = true;
   }
+
+  // 5. Hygiene sweep for files the import orphaned (never touched pre-commit).
+  const cleanupFailures = await cleanupImportMedia(deps.media, {
+    mode: plan.mode,
+    target: restored,
+    current: deps.current,
+  });
 
   const restoredPhotos = uriByKey.size;
   const unsatisfiedWithoutBytes = plan.photos.filter(
@@ -151,7 +209,7 @@ export async function runStagedBackupImport(
       : failedPhotos > 0
         ? 'incomplete-photos'
         : 'complete';
-  return { ok: true, outcome, restoredPhotos, failedPhotos };
+  return { ok: true, outcome, restoredPhotos, failedPhotos, cleanupFailures, refreshFailed };
 }
 
 /**

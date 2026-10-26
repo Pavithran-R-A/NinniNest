@@ -104,27 +104,35 @@ function createMemoryMediaPort(opts: {
   failStageAt?: number;
   failPromoteAt?: number;
   promoteThrows?: Error;
+  failCleanup?: boolean;
 } = {}): MediaPort & {
   staged: Map<string, Uint8Array>;
   promoted: Map<string, PortFile>;
   existing: Map<string, PortFile>;
   wipedStaging: number;
   rollbacks: number;
+  babyDirsDeleted: string[];
   preExisting(uri: string, bytes: Uint8Array): void;
 } {
   const staged = new Map<string, Uint8Array>();
   const stagedMeta = new Map<string, { owner: string; name: string }>();
   const promoted = new Map<string, PortFile>();
   const existing = new Map<string, PortFile>();
+  const babyDirsDeleted: string[] = [];
   let stageCalls = 0;
   let promoteCalls = 0;
   let createdUris: string[] = [];
+  const ownerOf = (uri: string): string | null => {
+    const m = /^file:\/\/managed\/([^/]+)\//.exec(uri);
+    return m ? m[1] : null;
+  };
   const port = {
     staged,
     promoted,
     existing,
     wipedStaging: 0,
     rollbacks: 0,
+    babyDirsDeleted,
     preExisting(uri: string, bytes: Uint8Array) {
       existing.set(uri, { uri, bytes });
     },
@@ -175,9 +183,40 @@ function createMemoryMediaPort(opts: {
       createdUris = [];
       staged.clear();
       stagedMeta.clear();
+      return 0;
     },
     isManagedUri(uri: string) {
       return uri.startsWith('file://managed/');
+    },
+    async listManagedBabyIds() {
+      const ids = new Set<string>();
+      for (const uri of [...promoted.keys(), ...existing.keys()]) {
+        const o = ownerOf(uri);
+        if (o) ids.add(o);
+      }
+      return [...ids];
+    },
+    async cleanupBabyFiles(babyId: string, referencedUris: Set<string>) {
+      if (opts.failCleanup) return { removed: 0, failures: 1 };
+      let removed = 0;
+      const prefix = `file://managed/${babyId}/`;
+      for (const map of [promoted, existing]) {
+        for (const uri of [...map.keys()]) {
+          if (!uri.startsWith(prefix) || referencedUris.has(uri)) continue;
+          map.delete(uri);
+          removed += 1;
+        }
+      }
+      return { removed, failures: 0 };
+    },
+    async deleteBabyDirectory(babyId: string) {
+      if (opts.failCleanup) return 1;
+      const prefix = `file://managed/${babyId}/`;
+      for (const map of [promoted, existing]) {
+        for (const uri of [...map.keys()]) if (uri.startsWith(prefix)) map.delete(uri);
+      }
+      babyDirsDeleted.push(babyId);
+      return 0;
     },
   };
   return port;
@@ -490,7 +529,90 @@ describe('staged backup restore (Task B workflow)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Records-only backups keep working; dangling photo references are handled honestly.
+// Post-import media hygiene (Stage 2B): a replace import orphans every file
+// the previous records referenced — those used to sit on disk forever.
+// ---------------------------------------------------------------------------
+
+describe('post-import media hygiene', () => {
+  const bytesFor = (seed: string) => new TextEncoder().encode(`old-media-${seed}`);
+
+  it('replace import sweeps unreferenced files of imported babies and deletes erased babies directories', async () => {
+    const { json } = v5BackupWithPhotos();
+    const repo = seededRepo();
+    await repo.init();
+    const media = createMemoryMediaPort();
+    // The device's previous life: an old baby (to be erased) and an old
+    // photo for the baby that the backup will re-restore.
+    media.preExisting('file://managed/old-baby/precious.jpg', bytesFor('erased'));
+    media.preExisting('file://managed/old-baby/other.jpg', bytesFor('erased2'));
+    const current = {
+      ...emptyData(),
+      babies: [{ ...BABY, id: 'old-baby', photoUri: 'file://managed/old-baby/precious.jpg' }],
+    };
+    const plan = planImport(json, current, 'replace');
+    const result = await runStagedBackupImport(repo, plan, { media, refresh, current });
+    expect(result.ok).toBe(true);
+    expect(result.cleanupFailures).toBe(0);
+    // erased profile's directory is gone (user confirmed the replace)
+    expect(media.babyDirsDeleted).toContain('old-baby');
+    expect(media.existing.has('file://managed/old-baby/precious.jpg')).toBe(false);
+    // the restored baby's directory keeps only the referenced (new) files
+    const baby = repo.data.babies.find((b) => b.id === BABY.id)!;
+    expect(media.promoted.has(baby.photoUri!)).toBe(true);
+  });
+
+  it('merge import performs no destructive cleanup', async () => {
+    const { json } = v5BackupWithPhotos();
+    const repo = seededRepo();
+    await repo.init();
+    const media = createMemoryMediaPort();
+    media.preExisting('file://managed/local-baby/local.jpg', bytesFor('local'));
+    await repo.replaceAll({ ...emptyData(), babies: [{ ...BABY, photoUri: 'file://managed/local-baby/local.jpg' }] });
+    const current = repo.data;
+    const plan = planImport(json, repo.data, 'merge');
+    const result = await runStagedBackupImport(repo, plan, { media, refresh, current });
+    expect(result.ok).toBe(true);
+    expect(media.babyDirsDeleted).toHaveLength(0);
+    expect(media.existing.has('file://managed/local-baby/local.jpg')).toBe(true);
+  });
+
+  it('cleanup failures are surfaced on the result, never silent', async () => {
+    const { json } = v5BackupWithPhotos();
+    const repo = seededRepo();
+    await repo.init();
+    const media = createMemoryMediaPort({ failCleanup: true });
+    media.preExisting('file://managed/old-baby/stuck.jpg', bytesFor('stuck'));
+    const current = { ...emptyData(), babies: [{ ...BABY, id: 'old-baby' }] };
+    const plan = planImport(json, current, 'replace');
+    const result = await runStagedBackupImport(repo, plan, { media, refresh, current });
+    expect(result.ok).toBe(true); // the import itself committed fine
+    expect(result.cleanupFailures).toBeGreaterThan(0);
+    expect(media.existing.has('file://managed/old-baby/stuck.jpg')).toBe(true);
+  });
+
+  it('a failed rollback reports its cleanup failures alongside the rolled-back outcome', async () => {
+    const { json } = v5BackupWithPhotos();
+    const repo = seededRepo();
+    await repo.init();
+    const media = createMemoryMediaPort();
+    const failingRollback = {
+      ...media,
+      async rollback() {
+        await media.rollback();
+        return 2; // simulate two files that could not be deleted
+      },
+    };
+    repo.failNextReplace = true;
+    const plan = planImport(json, emptyData(), 'replace');
+    const result = await runStagedBackupImport(repo, plan, { media: failingRollback, refresh });
+    expect(result.ok).toBe(false);
+    expect(result.outcome).toBe('rolled-back');
+    expect(result.cleanupFailures).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Records-only and legacy limitations (Task D honesty)
 // ---------------------------------------------------------------------------
 
 describe('records-only and legacy limitations (Task D honesty)', () => {
