@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Platform, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Clipboard from 'expo-clipboard';
 import { Copy, Share2 } from 'lucide-react-native';
 import { useTheme } from '@/src/design/ThemeProvider';
 import { fontNames, radius, spacing } from '@/src/design/tokens';
@@ -99,9 +100,8 @@ export default function HandoffScreen() {
       if (Platform.OS === 'web') {
         await navigator.clipboard.writeText(letter);
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { Clipboard } = require('react-native');
-        await Clipboard.setString(letter);
+        // RN removed its built-in Clipboard; expo-clipboard is the SDK path.
+        await Clipboard.setStringAsync(letter);
       }
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);

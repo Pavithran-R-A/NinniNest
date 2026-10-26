@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import { File, Directory, Paths } from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
+import { createZip } from './zip';
 import type { BackupFile } from './backup';
 
 // Writes content to a file in the app's cache and opens the platform share sheet.
@@ -56,14 +57,20 @@ export async function shareCsvBundle(
     return { ok: true, message: `Downloaded ${files.length} CSV files` };
   }
   try {
+    // Android's share sheet cannot share a directory; bundle the CSVs into a
+    // single stored-zip file (dependency-free, see zip.ts) and share that.
     const dir = new Directory(Paths.cache, `ninninest-csv-${Date.now()}`);
     dir.create({ idempotent: true });
-    for (const f of files) {
-      const file = new File(dir, `${f.name}.csv`);
-      await file.write(f.content);
-    }
+    const zipBytes = createZip(
+      files.map((f) => ({ name: `${f.name}.csv`, content: new TextEncoder().encode(f.content) }))
+    );
+    const zipFile = new File(Paths.cache, `ninninest-csv-${Date.now()}.zip`);
+    await zipFile.write(zipBytes);
     if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(dir.uri, { dialogTitle: 'NinniNest CSV export' });
+      await Sharing.shareAsync(zipFile.uri, {
+        mimeType: 'application/zip',
+        dialogTitle: 'NinniNest CSV export',
+      });
       return { ok: true, message: 'Shared' };
     }
     return { ok: false, message: 'Sharing is not available on this device.' };
