@@ -1,5 +1,61 @@
 # CHANGELOG
 
+## 0.7.1 — 2026-10-26 (Stage 2B — independent safety hardening)
+
+### Fixed
+- **Strict v5 photo integrity.** Entries claiming bytes now require
+  `hashAlgo: 'sha256'`, a well-formed 64-hex digest, integer byte-length
+  metadata that matches the decoded payload, and **canonical base64** (new
+  `decodeBase64Strict` rejects missing/excess/mid-string padding, whitespace,
+  and nonzero trailing bits). Unsupported algorithms and version/algorithm
+  combinations are rejected; v4 media without any checksum is rejected as
+  unverifiable rather than trusted. A malformed backup still can never mutate
+  existing records.
+- **Media port hardening.** The native port's state machine
+  (`createManagedMediaPort`) is now driven by injected filesystem primitives
+  and runs in tests with failure injection. Staged files are tracked BEFORE
+  the fallible write (a partial write is still rolled back), staged/promoted
+  names use `crypto.randomUUID()` (no same-millisecond collision), hostile
+  owner ids are sanitized, and rollback returns the count of files it could
+  not delete instead of swallowing silently.
+- **Post-import media hygiene (real leak closed).** A replace import used to
+  strand every photo the previous records referenced — the per-baby orphan
+  cleanup in `media.ts` existed but had **zero callers**. The import now
+  sweeps unreferenced files in imported babies' directories and removes whole
+  directories only for profiles the user's confirmed replace erased. Merge
+  mode cleans nothing. Cleanup failures surface in the result, never vanish.
+- **Exclusive import transaction.** `replaceAll` moved from DEFERRED to
+  `withExclusiveTransactionAsync` with the transaction handle used throughout:
+  under DEFERRED a concurrent quick-log or timer finish could JOIN the import's
+  open transaction and silently vanish on rollback. A failed UI refresh after
+  a successful commit is now reported ("reopen the app if something looks
+  stale") instead of being silently swallowed.
+- **Atomic timer completion.** New optional `CareRepository.completeTimerAtomic`
+  commits a stopped timer's journal event and the timer removal in ONE storage
+  transaction (SQLite exclusive transaction; IndexedDB single keyed put),
+  closing the process-death window that duplicated events on retry. Adapters
+  without the capability keep the compensating event-first ordering.
+
+### Changed
+- CI runtime bumped Node 20 → 22 (Expo SDK 57 requires ≥ 22.13).
+- `pnpm-lock.yaml` (a tool-generated duplicate of package.json resolutions,
+  created by an npx invocation) was investigated and removed; npm remains the
+  only package manager via `package-lock.json`.
+
+### Known gaps recorded (not fixed in this stage)
+- The photo picker is **not wired into any screen** — `media.ts` (durability
+  copies) and the entire backup photo pipeline have no UI producer on native,
+  so device backups contain no photos until the picker slice lands.
+- Real SQLite/IndexedDB execution of the new transaction paths remains
+  NOT TESTED (no device/emulator in this environment).
+
+### Test coverage
+- 37 new tests: strict v5 integrity (`tests/v5Integrity.test.ts`, 17),
+  media-port state machine (`tests/mediaPort.test.ts`, 11), atomic timer
+  completion (`tests/timerAtomic.test.ts`, 5), post-import hygiene
+  (4 in `tests/backupRestore.test.ts`).
+- Full suite: **225/225 (17 files)** · strict typecheck exit 0 · web export 0.
+
 ## 0.7.0 — 2026-10-26 (Stage 2 — staged, crash-recoverable backup restore; genuine SHA-256)
 
 ### Fixed

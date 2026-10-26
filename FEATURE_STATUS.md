@@ -1,6 +1,20 @@
 # FEATURE_STATUS.md
 
-Last updated: 2026-10-26 (Stage 2 — staged, crash-recoverable backup restore; genuine SHA-256)
+Last updated: 2026-10-26 (Stage 2B — independent safety hardening)
+
+## Stage 2B — safety hardening (2026-10-26)
+| Aspect | Status |
+| --- | --- |
+| Strict v5 integrity | DONE — bytes require `hashAlgo:'sha256'` + 64-hex digest + matching byte length + canonical base64 (`decodeBase64Strict`); unsupported algorithms/combinations rejected; v4 checksums verified as legacy only, never reinterpreted; checksum-less media rejected as unverifiable. |
+| Media port hardening | DONE — real state machine (`createManagedMediaPort(io)`) tested with failure injection: track-before-write, UUID-unique names, owner sanitization, rollback failure counts. |
+| Post-import hygiene | DONE — replace imports now sweep orphaned media (the `media.ts` cleanup had ZERO callers before — files previously accumulated forever); erased profiles' directories removed only after a confirmed replace; merge cleans nothing; failures surfaced. |
+| Import transaction | DONE — `replaceAll` uses `withExclusiveTransactionAsync` (handle throughout); DEFERRED join-the-transaction hazard closed. |
+| Timer atomicity | DONE — optional `completeTimerAtomic` (SQLite exclusive tx / IndexedDB single put) preferred by `commitTimerCompletion`; fallback ordering retained and regression-tested. |
+| Honest states | DONE — refresh-failed and cleanup-incomplete are reported in en+ta; never reported as clean success. |
+| CI runtime | DONE — Node 22 (SDK 57 requires ≥22.13); runs still blocked by the account's GitHub Actions billing status (infrastructure blocker, not code). |
+| Real-adapter execution | NOT TESTED — new SQLite/IndexedDB transaction paths are typechecked and contract-tested only; needs device (see DEVICE_TEST_MATRIX). |
+| Photo producer | GAP — no image picker is wired into any screen; the durability + backup photo pipeline has no native producer, so device backups contain no photos until the picker slice lands. |
+| Verification | typecheck 0; **225/225 tests, 17 files** (+37); web export 0; expo-doctor: 1 informational CNG notice (local prebuild dir present, uncommitted). |
 
 ## Stage 2 — safe media-inclusive backup restore (2026-10-26)
 | Aspect | Status |

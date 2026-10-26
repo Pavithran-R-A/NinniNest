@@ -1,8 +1,90 @@
 # RELEASE_EVIDENCE.md
 
-Recorded: 2026-10-26 · Stage 2 (staged backup restore + genuine SHA-256) · prior: Stage 1 fix (2026-10-18), Stage 1 import validation, PROMPT A + Phases B/C/D/E/F + P0 Demo Mode fix
+Recorded: 2026-10-26 · Stage 2B (independent safety hardening) · prior: Stage 2 (staged backup restore + SHA-256, same day), Stage 1 fix (2026-10-18), Phases B/C/D/E/F + P0 Demo Mode fix
 
-## Stage 2 — staged, crash-recoverable backup restore (this run)
+## Stage 2B — independent safety hardening (this run)
+
+Base: `88a7689ba4e2803912b93f8a18ed60996d1a0507` (remote-verified equal to origin
+before work started; `main` untouched at `4902b47e`). Four validated commits,
+pushed and re-verified after each push.
+
+### Defects reproduced and repaired
+1. **Digest checked only when present** (`planImport`): a v5 entry with bytes
+   but NO `sha256`, or with a legacy-style checksum and no `hashAlgo`, was
+   accepted unverified. Now: v5 requires `hashAlgo:'sha256'` + 64-hex digest +
+   integer byte length matching the decoded payload + canonical base64
+   (`decodeBase64Strict` — rejects padding/whitespace/nonzero-trailing-bit
+   variants); unsupported algorithms and version/algorithm combinations are
+   hard errors; v4 media without any checksum is rejected as unverifiable.
+2. **Partial-write orphans in `createMediaPort`**: staged files were tracked
+   AFTER the fallible write, so a failed `write()` left an untracked file (only
+   the next launch sweep would catch it). Now tracked BEFORE the write;
+   rollback reaches partial writes.
+3. **Same-millisecond name collisions**: staged/promoted names used
+   `Date.now()` + `Math.random()` fragments; now `crypto.randomUUID()`.
+4. **Silent rollback failures**: `rollback()` swallowed delete errors; it now
+   returns a failure count surfaced to the user.
+5. **Orphaned media accumulated forever**: `cleanupOrphansForBaby` /
+   `collectBabyMediaUris` in `media.ts` had **zero callers** — the Stage 2
+   comment claiming crashed imports' promoted files "are reclaimed by per-baby
+   cleanup" promised recovery that did not exist. Replace imports now sweep
+   unreferenced files in imported babies' directories and remove directories
+   of profiles the user's confirmed replace erased (computed from pre-import
+   data, so concurrently-created records are untouched); merge cleans nothing;
+   failures surface on the result.
+6. **DEFERRED import transaction**: a concurrent quick-log/timer write could
+   join the open import transaction and vanish on rollback. `replaceAll` now
+   runs `withExclusiveTransactionAsync` with the transaction handle throughout
+   (insert helpers refactored onto a shared Runner type).
+7. **Timer completion kill-window**: event insert and timer delete were two
+   separate writes with only best-effort compensation. New optional
+   `completeTimerAtomic` (SQLite exclusive tx; IndexedDB single keyed put) is
+   preferred by `commitTimerCompletion`; the compensating fallback remains for
+   adapters without the capability.
+8. **Silent refresh failure**: a failed post-commit UI refresh was swallowed;
+   now reported (en+ta: "reopen the app if something looks stale").
+
+### Environment findings
+- `pnpm-lock.yaml` appeared during the previous session (created 21:07 IST by
+  an npx invocation; a mechanical mirror of the current package.json
+  resolutions — no hand-authored content). Investigated and deleted; npm via
+  `package-lock.json` remains the only package manager.
+- **Photo producer gap**: no image picker is wired into any screen. `media.ts`
+  (durability copies per AGENTS.md rule 12) and the whole backup photo
+  pipeline have no UI producer on native — real-device backups would contain
+  zero photos. Recorded as the top product backlog item (does not affect the
+  safety properties of the restore path itself).
+- CI: run `40351509389` remains **FAILED before any step executed** — GitHub
+  reports the account's payments/spending-limit status as the blocker. This is
+  an infrastructure blocker; CI must NOT be labelled green. Workflow updated
+  to Node 22 (SDK 57 requirement) so the next enabled run is correct.
+
+### Verification (actual results, this machine)
+| Check | Command | Exit code | Result |
+| --- | --- | --- | --- |
+| Strict TypeScript | `npm run typecheck` | 0 | clean |
+| Full test suite | `npm test` | 0 | **225/225 passed, 17 files** (was 188 — 37 new) |
+| Focused new suites | `v5Integrity` 17, `mediaPort` 11, `timerAtomic` 5, hygiene 4 | 0 | all confirmed failing before their fixes (or testing new behaviour) |
+| Web export | `npx expo export --platform web` | 0 | dist/ regenerated |
+| SDK compatibility | `npx expo-doctor` | 1 | 1 informational failure only: CNG sync notice because the locally generated (uncommitted) `android/` dir exists — expected for the prebuild workflow; version-drift check passes |
+| Remote parity | `git ls-remote origin` after each push | 0 | verified equal to local HEAD after every push |
+| Real SQLite/IndexedDB execution | — | — | **NOT TESTED** — no device/emulator in this environment; SQLite paths are typechecked, contract-tested via in-memory adapters, and require `expo-sqlite` at runtime |
+| Android APK | — | — | **NOT PRODUCED.** Feasibility: NDK 27.2 installed, wrapper 9.3.1 present, prebuild + local.properties ready — but only ~2.4 GB free (gradle needs ≥6 GB headroom). No build attempted this phase per instructions. |
+| Emulator/device run | — | — | **NOT RUN** (instructions: no emulator launches this phase) |
+
+### Honest scope statement
+- All filesystem/transaction behaviour is verified through the real state
+  machines with injected fakes plus contract-level repository adapters. That
+  is NOT device evidence: real `expo-sqlite` exclusive transactions, real
+  `expo-file-system` staging, permission denial and low-storage behaviour stay
+  in `docs/DEVICE_TEST_MATRIX.md` as NOT TESTED.
+- DB + files are still not one atomic transaction (impossible); recovery
+  remains staged and is now *actually* wired: staging sweeps at
+  launch/import-start, hygiene sweep after commit, rollback failure counts.
+- No crash-recovery claim rests on a comment alone anymore: every recovery
+  path named here has a test asserting the file/record outcome.
+
+## Stage 2 — staged, crash-recoverable backup restore (2026-10-26)
 
 Environment: recovery session on the owner's Windows machine (ZCode, GLM-5.3-Flash
 via zai-start-plan). The repository was cloned fresh from

@@ -23,24 +23,34 @@ language.
 
 ## Product limits (intentional or pending)
 
-4. **No growth percentiles.** No validated, licensed WHO dataset is bundled; the app
+4. **No photo producer is wired in.** `media.ts` (durability copies) and the
+   entire backup/restore photo pipeline exist and are tested, but **no screen
+   imports a photo** — `expo-image-picker` is a dependency with zero imports.
+   Until the picker slice lands, native backups contain no embedded photos and
+   baby/milestone photo fields stay empty. Restore-side behaviour is verified;
+   the missing piece is the producer UI.
+5. **No growth percentiles.** No validated, licensed WHO dataset is bundled; the app
    shows descriptive trends only, never invented medical interpretation.
-5. **Routine reminders never create records.** Notifications are informational only —
+6. **Routine reminders never create records.** Notifications are informational only —
    they cannot write medication administrations or journal entries.
-6. **No medication dose calculation.** The app records what was given; it never
+7. **No medication dose calculation.** The app records what was given; it never
    suggests or computes doses.
-7. **Notifications are Android/iOS only.** Web cannot schedule them (platform
+8. **Notifications are Android/iOS only.** Web cannot schedule them (platform
    limitation, surfaced in the UI).
-8. **Photos: web has no managed copy.** Durability copying is native-only; web keeps
+9. **Photos: web has no managed copy.** Durability copying is native-only; web keeps
    blob references for the session's data. Backup imports on web are records-only
    (the no-op media port), stated in the result message.
-9. **Large photo libraries unmeasured.** Full backups embed photos as base64 in one
-   JSON file; memory and file size with dozens of photos is untested.
-10. **No cloud sync, no accounts, no payments** — by design, per project rules.
-11. **Native Copy button (Handoff) is broken on devices.** `handoff.tsx` calls the
+10. **Large photo libraries unmeasured.** Full backups embed photos as base64 in one
+    JSON file; memory and file size with dozens of photos is untested.
+11. **No cloud sync, no accounts, no payments** — by design, per project rules.
+12. **Native Copy button (Handoff) is broken on devices.** `handoff.tsx` calls the
     removed `react-native` Clipboard API; migrate to `expo-clipboard`
     (`Clipboard.setStringAsync`) — next code task after the backup-safety items,
     per GitHub issue #1.
+13. **Real-adapter transactions not executed.** The Stage 2B exclusive
+    transactions and atomic timer completion are typechecked and
+    contract-tested (in-memory adapters, injected-io state machine) but have
+    never run against real `expo-sqlite`/IndexedDB — a device is required.
 
 ## Unresolved before calling it "release-ready"
 

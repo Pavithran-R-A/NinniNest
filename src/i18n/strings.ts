@@ -155,6 +155,10 @@ const en: Dict = {
   'settings.importRolledBack':
     'The import failed while writing and was rolled back — your previous records and photos are unchanged. Please try again.',
   'settings.importValidationFailed': 'The backup could not be validated; nothing was written.',
+  'settings.importRefreshNote':
+    'Your records are restored, but the lists could not refresh just now — reopen the app if something looks stale.',
+  'settings.importCleanupIncomplete':
+    'Note: {n} temporary file(s) could not be removed automatically. Your records are safe, and the app never reads leftover files.',
   'settings.tryDemo': 'Try demo mode',
   'settings.exitDemo': 'Exit demo mode',
   'settings.about':
@@ -286,6 +290,10 @@ const ta: Dict = {
   'settings.importRolledBack':
     'எழுதும் போது இறக்குமதி தோல்வியடைந்தது, திரும்பப் பெறப்பட்டது — உங்கள் முந்தைய பதிவுகளும் புகைப்படங்களும் அப்படியே உள்ளன. மீண்டும் முயற்சிக்கவும்.',
   'settings.importValidationFailed': 'காப்பகத்தைச் சரிபார்க்க முடியவில்லை; எதுவும் எழுதப்படவில்லை.',
+  'settings.importRefreshNote':
+    'உங்கள் பதிவுகள் மீட்டமைக்கப்பட்டுவிட்டன, ஆனால் பட்டியல்களை இப்போது புதுப்பிக்க முடியவில்லை — ஏதும் தவறாகத் தோன்றினால் செயலியை மீண்டும் திறக்கவும்.',
+  'settings.importCleanupIncomplete':
+    'குறிப்பு: {n} தற்காலிகக் கோப்பு(களை) தானாக அகற்ற முடியவில்லை. உங்கள் பதிவுகள் பாதுகாப்பாக உள்ளன; செயலி மீதமுள்ள கோப்புகளைப் படிக்காது.',
   'settings.tryDemo': 'மாதிரி முறையை முயற்சி',
   'settings.exitDemo': 'மாதிரி முறையை விட்டு வெளியேறு',
   'settings.about':

@@ -1,4 +1,4 @@
-# Device test matrix — Phase E, updated Stage 2 (2026-10-26)
+# Device test matrix — Phase E, updated Stage 2B (2026-10-26)
 
 Labels: **VERIFIED** = proven with real evidence in this environment; **FAILED** = ran
 and failed; **NOT TESTED** = could not run here (no device, emulator, or browser
@@ -10,8 +10,11 @@ behind it.
 | Item | Evidence | Status |
 | --- | --- | --- |
 | Strict TypeScript, whole app | `npx tsc --noEmit` exit 0 | VERIFIED |
-| Unit/integration suite | `npm test` exit 0 — **188/188 tests, 14 files** (Stage 2, 2026-10-26) | VERIFIED |
-| Staged backup restore logic | 21 tests in `tests/backupRestore.test.ts`: fresh-device photo restore + URI re-linking, stage/promote/DB failure rollbacks preserving pre-existing media, interrupted-import sweep, merge-vs-replace photo semantics, name collisions, duplicate/invalid/traversal manifest entries, legacy v4 checksum semantics, SHA-256 vectors vs node:crypto | VERIFIED (in-memory media port + contract-level repository — NOT a real device filesystem test) |
+| Unit/integration suite | `npm test` exit 0 — **225/225 tests, 17 files** (Stage 2B, 2026-10-26) | VERIFIED |
+| Strict v5 media integrity | `tests/v5Integrity.test.ts` (17): canonical base64, version-matched verifiers, digest/length validation, combination rejection, zero mutation on rejection | VERIFIED (pure logic) |
+| Media port state machine | `tests/mediaPort.test.ts` (11) against the REAL `createManagedMediaPort` with failure-injected io: track-before-write, unique names, partial-promote rollback, failure counting | VERIFIED (injected fakes — NOT a real filesystem) |
+| Atomic timer completion | `tests/timerAtomic.test.ts` (5): atomic preferred, failure commits nothing, fallback preserved | VERIFIED (contract level) |
+| Staged backup restore logic | 25 tests in `tests/backupRestore.test.ts` incl. post-import hygiene sweeps | VERIFIED (in-memory media port + contract-level repository — NOT a real device filesystem test) |
 | Backup round-trip integrity | 11 backupIntegrity tests: counts, identities, fields, photo hash verify, corrupt-payload rejection, truncated/malformed/newer-version rejection, double-import merge idempotence | VERIFIED |
 | Calendar validation | tests reject 2026-02-30, April 31, non-leap Feb 29, bad birth dates | VERIFIED |
 | Analytics math | window aggregation, mixed milk, sides, night/nap split, empty days, multi-baby isolation | VERIFIED |
@@ -28,7 +31,10 @@ Run after installing the APK; tick each row honestly.
 
 | Item | How to test |
 | --- | --- |
-| Staged backup restore on real filesystem (Stage 2) | Export a backup with baby + milestone photos on device A; wipe app data (or use device B); import; verify photos appear, survive restart, and the native `expo-file-system` port wrote only inside `Documents/ninninest-media/<babyId>/` |
+| Real `expo-sqlite` exclusive transactions (Stage 2B) | On device: hold the import modal open while a timer finishes; verify the timer write waits (EXCLUSIVE) and no record vanishes; kill mid-`replaceAll` and relaunch — old state intact |
+| Real `expo-file-system` staging + hygiene (Stage 2B) | Import with photos; inspect `Documents/ninninest-media/`: `.staging` empty, promoted files under per-baby dirs, pre-import orphans swept after a replace |
+| Photo pipeline end-to-end | BLOCKED until the picker is wired into FamilyForms (media.ts has no producer — see KNOWN_LIMITATIONS); then: pick → managed copy → backup → restore → photo visible after restart |
+| Staged backup restore on real filesystem (Stage 2) | Export a backup with baby + milestone photos on device A; wipe app data (or use device B); import; verify photos appear, survive restart, and only `Documents/ninninest-media/<babyId>/` was written |
 | Interrupted import recovery on device | Start a replace import, force-stop the app mid-import, relaunch, verify staging debris swept and records intact |
 | Corrupt backup rejection on device | Tamper a photo byte inside the backup JSON, import, verify rejection dialog and zero changes |
 | App launches from cold start | Install APK, tap icon, reach Today screen |

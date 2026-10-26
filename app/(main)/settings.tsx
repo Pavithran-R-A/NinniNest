@@ -96,19 +96,30 @@ export default function SettingsScreen() {
                 current: data,
               });
               const modeLabel = tr(importMode === 'merge' ? 'settings.importModeMerge' : 'settings.importModeReplace');
+              let message: string;
               if (result.outcome === 'complete') {
-                setMessage(tr('settings.importComplete', { mode: modeLabel, summary, n: result.restoredPhotos }));
+                message = tr('settings.importComplete', { mode: modeLabel, summary, n: result.restoredPhotos });
               } else if (result.outcome === 'incomplete-photos') {
-                setMessage(tr('settings.importIncomplete', { mode: modeLabel, summary, n: result.failedPhotos }));
+                message = tr('settings.importIncomplete', { mode: modeLabel, summary, n: result.failedPhotos });
               } else if (result.outcome === 'records-only') {
-                setMessage(tr('settings.importRecordsOnly', { mode: modeLabel, summary }));
+                message = tr('settings.importRecordsOnly', { mode: modeLabel, summary });
               } else if (result.outcome === 'storage-failed') {
-                setMessage(tr('settings.importStorageFailed'));
+                message = tr('settings.importStorageFailed');
               } else if (result.outcome === 'rolled-back') {
-                setMessage(tr('settings.importRolledBack'));
+                message = tr('settings.importRolledBack');
               } else {
-                setMessage(tr('settings.importValidationFailed'));
+                message = tr('settings.importValidationFailed');
               }
+              // Honest follow-ups: the import may have succeeded while the
+              // list refresh failed, and rollback/cleanup may have leftover
+              // files. Neither is ever reported as a clean success.
+              if (result.refreshFailed) {
+                message += `\n\n${tr('settings.importRefreshNote')}`;
+              }
+              if (result.cleanupFailures > 0) {
+                message += `\n\n${tr('settings.importCleanupIncomplete', { n: result.cleanupFailures })}`;
+              }
+              setMessage(message);
             } catch {
               setMessage(tr('settings.importStorageFailed'));
             }

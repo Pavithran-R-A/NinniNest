@@ -12,7 +12,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Expo SDK 57 requires Node >= 22.13
+          node-version: '22'
           cache: npm
 
       - name: Install dependencies
