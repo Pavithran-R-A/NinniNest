@@ -36,6 +36,8 @@ import { EmptyState } from '@/src/components/ui';
 import {
   BabyForm, GrowthForm, MilestoneForm, MedicationForm, VaccinationForm, RoutineForm,
 } from '@/src/screens/FamilyForms';
+import { persistRecordWithPhoto, type PhotoWorkflowIo } from '@/src/models/photoPersist';
+import { importPhoto, deletePhotoIfInManagedDir } from '@/src/models/media';
 import { useI18n } from '@/src/i18n/useI18n';
 
 type FamilyTab = 'profiles' | 'growth' | 'milestones' | 'health' | 'routines';
@@ -65,6 +67,33 @@ export default function FamilyScreen() {
   const [tab, setTab] = useState<FamilyTab>('profiles');
   const [sheet, setSheet] = useState<string | null>(null);
   const [editingBaby, setEditingBaby] = useState<Baby | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const closeSheet = () => {
+    setSheet(null);
+    setEditingBaby(null);
+    setSaveError(null);
+  };
+
+  // Photo durability io: copies into the managed media area (native) and only
+  // ever deletes files the operation itself created. Web is records-only.
+  const photoIo: PhotoWorkflowIo = {
+    importPhoto: (src, babyId) => importPhoto(src, babyId),
+    deleteManagedPhoto: (uri) => deletePhotoIfInManagedDir(uri),
+  };
+
+  /** Runs the photo-aware save; keeps the sheet open with a message on failure. */
+  const runPhotoSave = async (
+    outcome: { ok: boolean; error?: 'copy-failed' | 'save-failed' },
+    onSuccess: () => void
+  ) => {
+    if (outcome.ok) {
+      setSaveError(null);
+      onSuccess();
+    } else {
+      setSaveError(tr(outcome.error === 'copy-failed' ? 'family.copyFailed' : 'family.saveFailed'));
+    }
+  };
 
   const personalBabies = useMemo(() => data.babies.filter((b) => !b.isDemo), [data.babies]);
   const units = currentBaby?.preferredUnits ?? 'metric';
@@ -115,8 +144,6 @@ export default function FamilyScreen() {
     ]);
   };
 
-  const closeSheet = () => setSheet(null);
-
   const weightTrend = useMemo(
     () => (currentBaby ? buildTrend(babyGrowth, (g) => g.weightGrams, currentBaby.birthDate) : []),
     [babyGrowth, currentBaby]
@@ -154,15 +181,26 @@ export default function FamilyScreen() {
           <View style={styles.sheetBackdrop}>
             <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
             <View style={[styles.sheet, { backgroundColor: t.canvas }]}>
+              {saveError ? <Text style={{ color: t.cinnamon, marginBottom: 12 }}>{saveError}</Text> : null}
               <BabyForm
+                canUsePhotos={!isDemo}
                 onCancel={closeSheet}
-                onSave={(b) => {
-                  addBaby({
-                    ...(b as Omit<Baby, 'id' | 'createdAt'>),
+                onSave={async (b) => {
+                  const baby: Baby = {
                     id: crypto.randomUUID(),
                     createdAt: new Date().toISOString(),
-                  });
-                  setSheet(null);
+                    name: b.name,
+                    birthDate: b.birthDate,
+                    preferredUnits: b.preferredUnits,
+                  };
+                  runPhotoSave(
+                    await persistRecordWithPhoto(
+                      photoIo,
+                      { record: baby, babyId: baby.id, pendingPhotoUri: b.pendingPhotoUri, isNew: true },
+                      (rec) => addBaby(rec)
+                    ),
+                    () => setSheet(null)
+                  );
                 }}
               />
             </View>
@@ -293,26 +331,52 @@ export default function FamilyScreen() {
         <View style={styles.sheetBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
           <View style={[styles.sheet, { backgroundColor: t.canvas }]}>
+            {saveError ? <Text style={{ color: t.cinnamon, marginBottom: 12 }}>{saveError}</Text> : null}
             {sheet === 'baby' && (
               <BabyForm
                 initial={editingBaby ?? undefined}
+                canUsePhotos={!isDemo}
                 onCancel={closeSheet}
-                onSave={(b) => {
-                  if (b.id) {
-                    updateBaby({
-                      ...(editingBaby as Baby),
+                onSave={async (b) => {
+                  if (b.id && editingBaby) {
+                    const baby: Baby = {
+                      ...editingBaby,
                       name: b.name,
                       birthDate: b.birthDate,
                       preferredUnits: b.preferredUnits,
-                    });
+                    };
+                    runPhotoSave(
+                      await persistRecordWithPhoto(
+                        photoIo,
+                        {
+                          record: baby,
+                          babyId: baby.id,
+                          pendingPhotoUri: b.pendingPhotoUri,
+                          removePhoto: b.removePhoto,
+                          previousPhotoUri: editingBaby.photoUri,
+                          isNew: false,
+                        },
+                        (rec) => updateBaby(rec)
+                      ),
+                      () => closeSheet()
+                    );
                   } else {
-                    addBaby({
-                      ...(b as Omit<Baby, 'id' | 'createdAt'>),
+                    const baby: Baby = {
                       id: crypto.randomUUID(),
                       createdAt: new Date().toISOString(),
-                    });
+                      name: b.name,
+                      birthDate: b.birthDate,
+                      preferredUnits: b.preferredUnits,
+                    };
+                    runPhotoSave(
+                      await persistRecordWithPhoto(
+                        photoIo,
+                        { record: baby, babyId: baby.id, pendingPhotoUri: b.pendingPhotoUri, isNew: true },
+                        (rec) => addBaby(rec)
+                      ),
+                      () => closeSheet()
+                    );
                   }
-                  setSheet(null);
                 }}
               />
             )}
@@ -333,15 +397,29 @@ export default function FamilyScreen() {
             )}
             {sheet === 'milestone' && currentBaby && (
               <MilestoneForm
+                canUsePhotos={!isDemo}
                 onCancel={closeSheet}
-                onSave={(m) => {
-                  addMilestone({
-                    ...m,
+                onSave={async (m) => {
+                  const { pendingPhotoUri: _pending, ...fields } = m;
+                  const milestone: MilestoneRecord = {
+                    ...fields,
                     id: crypto.randomUUID(),
                     babyId: currentBaby.id,
                     ...(isDemo ? { isDemo: true } : {}),
-                  });
-                  setSheet(null);
+                  };
+                  runPhotoSave(
+                    await persistRecordWithPhoto(
+                      photoIo,
+                      {
+                        record: milestone,
+                        babyId: currentBaby.id,
+                        pendingPhotoUri: _pending,
+                        isNew: true,
+                      },
+                      (rec) => addMilestone(rec)
+                    ),
+                    () => closeSheet()
+                  );
                 }}
               />
             )}

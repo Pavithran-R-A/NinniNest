@@ -3,7 +3,8 @@ import * as ImagePicker from 'expo-image-picker';
 export interface PickPhotoResult {
   ok: boolean;
   uri?: string;
-  message?: string;
+  /** Machine-readable failure so the UI can show a localized message. */
+  error?: 'permission' | 'canceled' | 'unreadable' | 'open-failed';
 }
 
 // Opens the media library and returns a picker URI. The caller must copy the
@@ -12,7 +13,7 @@ export async function pickPhoto(): Promise<PickPhotoResult> {
   try {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      return { ok: false, message: 'Photo access needs your permission to add pictures.' };
+      return { ok: false, error: 'permission' };
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -21,12 +22,12 @@ export async function pickPhoto(): Promise<PickPhotoResult> {
       exif: false,
     });
     if (result.canceled || result.assets.length === 0) {
-      return { ok: false, message: 'No photo chosen.' };
+      return { ok: false, error: 'canceled' };
     }
     const uri = result.assets[0]?.uri;
-    if (!uri) return { ok: false, message: 'The photo could not be read.' };
+    if (!uri) return { ok: false, error: 'unreadable' };
     return { ok: true, uri };
   } catch {
-    return { ok: false, message: 'The photo could not be opened.' };
+    return { ok: false, error: 'open-failed' };
   }
 }

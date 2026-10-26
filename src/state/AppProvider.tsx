@@ -12,6 +12,7 @@ import { commitTimerCompletion, type TimerExtras } from '@/src/models/timerCompl
 import { planImport, applyImportPlan, describeImportPlan, type ImportPlan } from '@/src/models/importPlan';
 import { remapEmbeddedPhotos, createMediaPort, type EmbeddedPhoto } from '@/src/models/mediaBackup';
 import { sweepImportStaging } from '@/src/models/backupRestore';
+import { deleteBabyMediaDir, deletePhotoIfInManagedDir } from '@/src/models/media';
 import {
   validateEvent, validateBaby, validateTimer, validateGrowth, validateMilestone,
   validateMedication, validateMedicationAdministration, validateVaccination, validateRoutine,
@@ -267,6 +268,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (isDemo) return false;
       try {
         await repo.deleteBaby(id);
+        // Only after the record cascade committed: reclaim this baby's managed
+        // media directory (profile photo + milestone photos live there).
+        await deleteBabyMediaDir(id);
         if (activeBabyId === id) {
           setActiveBabyIdState(null);
           AsyncStorage.removeItem(ACTIVE_BABY_KEY).catch(() => {});
@@ -418,6 +422,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (m) => repo.addMilestone(m),
     (id) => repo.deleteMilestone(id)
   );
+  // Milestone deletion also reclaims the photo file — but only after the
+  // record delete committed, and only if the file is in managed storage.
+  const deleteMilestone = useCallback(
+    async (id: string) => {
+      const milestone = data.milestones.find((m) => m.id === id);
+      const ok = await milestoneCrud.deleteFn(id);
+      if (ok && milestone?.photoUri) await deletePhotoIfInManagedDir(milestone.photoUri);
+      return ok;
+    },
+    [data.milestones, milestoneCrud.deleteFn]
+  );
   const medicationCrud = usePhaseCCrud<MedicationRecord>(
     (m) => repo.addMedication(m),
     (id) => repo.deleteMedication(id)
@@ -535,7 +550,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addGrowthRecord: growthCrud.addFn,
     deleteGrowthRecord: growthCrud.deleteFn,
     addMilestone: milestoneCrud.addFn,
-    deleteMilestone: milestoneCrud.deleteFn,
+    deleteMilestone,
     addMedication: medicationCrud.addFn,
     deleteMedication: medicationCrud.deleteFn,
     addMedicationAdministration: administrationCrud.addFn,

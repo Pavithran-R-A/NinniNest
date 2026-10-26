@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { X } from 'lucide-react-native';
 import { useTheme } from '@/src/design/ThemeProvider';
 import { radius, spacing } from '@/src/design/tokens';
 import { PrimaryButton, SegmentedControl } from '@/src/components/ui';
+import { useI18n } from '@/src/i18n/useI18n';
+import { pickPhoto } from '@/src/models/photoPick';
 import type { Baby, GrowthRecord, MedicationRecord, MilestoneCategory, MilestoneRecord, RoutineKind, RoutineTemplate, VaccinationRecord } from '@/src/models/types';
 
 function SheetHeader({ title, onCancel, subtitle }: { title: string; onCancel: () => void; subtitle?: string }) {
@@ -69,22 +71,107 @@ function TextInputField({
   );
 }
 
+// ---- Photo section (shared by baby and milestone forms) ----
+
+function PhotoSection({
+  previewUri, onChange, canUsePhotos, previewLabel,
+}: {
+  previewUri: string | null;
+  /** Called with the freshly picked URI, or null when the user requests removal. */
+  onChange: (uri: string | null) => void;
+  canUsePhotos: boolean;
+  previewLabel: string;
+}) {
+  const t = useTheme();
+  const { t: tr } = useI18n();
+  const [note, setNote] = useState<string | null>(null);
+
+  if (!canUsePhotos) {
+    return (
+      <Text style={[styles.hint, { color: t.inkFaint }]}>{tr('family.photo.demoNote')}</Text>
+    );
+  }
+  const pick = async () => {
+    const result = await pickPhoto();
+    if (result.ok && result.uri) {
+      setNote(null);
+      onChange(result.uri);
+      return;
+    }
+    const key =
+      result.error === 'permission' ? 'family.photo.denied'
+      : result.error === 'canceled' ? null // silent: a cancel is not an error
+      : result.error === 'unreadable' ? 'family.photo.unreadable'
+      : 'family.photo.openFailed';
+    if (key) setNote(tr(key));
+  };
+  return (
+    <View>
+      {previewUri ? (
+        <Image
+          source={{ uri: previewUri }}
+          style={styles.photoPreview}
+          accessibilityLabel={previewLabel}
+          resizeMode="cover"
+        />
+      ) : null}
+      <View style={styles.photoButtons}>
+        <PrimaryButton
+          label={previewUri ? tr('family.photo.replace') : tr('family.photo.add')}
+          variant="secondary"
+          onPress={() => void pick()}
+          accessibilityLabel={previewUri ? tr('family.photo.replace') : tr('family.photo.add')}
+        />
+        {previewUri ? (
+          <PrimaryButton
+            label={tr('family.photo.remove')}
+            variant="secondary"
+            onPress={() => {
+              setNote(null);
+              onChange(null);
+            }}
+            accessibilityLabel={tr('family.photo.remove')}
+          />
+        ) : null}
+      </View>
+      {note ? <Text style={[styles.hint, { color: t.cinnamon }]}>{note}</Text> : null}
+    </View>
+  );
+}
+
 // ---- Baby profile ----
+
+export interface BabyFormSave {
+  id?: string;
+  name: string;
+  birthDate: string;
+  preferredUnits: 'metric' | 'imperial';
+  /** A freshly picked photo (picker/cache URI) — the caller copies it into managed storage. */
+  pendingPhotoUri?: string;
+  /** Explicit removal request on edit. */
+  removePhoto?: boolean;
+}
 
 export function BabyForm({
   initial,
   onCancel,
   onSave,
+  canUsePhotos = true,
 }: {
   initial?: Baby;
   onCancel: () => void;
-  onSave: (b: Omit<Baby, 'id' | 'createdAt'> & { id?: string }) => void;
+  onSave: (b: BabyFormSave) => void;
+  canUsePhotos?: boolean;
 }) {
   const t = useTheme();
   const [name, setName] = useState(initial?.name ?? '');
   const [birthDate, setBirthDate] = useState(initial?.birthDate ?? '');
   const [units, setUnits] = useState<'metric' | 'imperial'>(initial?.preferredUnits ?? 'metric');
+  const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const shownPhoto = removePhoto ? null : pendingPhotoUri ?? initial?.photoUri ?? null;
 
   const save = () => {
     if (!name.trim()) {
@@ -100,7 +187,8 @@ export function BabyForm({
       name: name.trim(),
       birthDate,
       preferredUnits: units,
-      ...(initial?.photoUri ? { photoUri: initial.photoUri } : {}),
+      ...(pendingPhotoUri ? { pendingPhotoUri } : {}),
+      ...(removePhoto && initial?.photoUri ? { removePhoto: true } : {}),
     });
   };
 
@@ -126,6 +214,17 @@ export function BabyForm({
           ]}
           value={units}
           onChange={setUnits}
+        />
+      </Field>
+      <Field label="Photo">
+        <PhotoSection
+          previewUri={shownPhoto}
+          canUsePhotos={canUsePhotos}
+          previewLabel="Baby photo preview"
+          onChange={(uri) => {
+            setRemovePhoto(uri === null);
+            setPendingPhotoUri(uri);
+          }}
         />
       </Field>
       {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
@@ -252,15 +351,18 @@ const MILESTONE_CATEGORIES: { value: MilestoneCategory; label: string }[] = [
 export function MilestoneForm({
   onCancel,
   onSave,
+  canUsePhotos = true,
 }: {
   onCancel: () => void;
-  onSave: (m: Omit<MilestoneRecord, 'id' | 'babyId'>) => void;
+  onSave: (m: Omit<MilestoneRecord, 'id' | 'babyId'> & { pendingPhotoUri?: string }) => void;
+  canUsePhotos?: boolean;
 }) {
   const t = useTheme();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<MilestoneCategory>('motor');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState('');
+  const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const save = () => {
@@ -277,6 +379,7 @@ export function MilestoneForm({
       category,
       date,
       ...(note.trim() ? { note: note.trim() } : {}),
+      ...(pendingPhotoUri ? { pendingPhotoUri } : {}),
     });
   };
 
@@ -294,6 +397,14 @@ export function MilestoneForm({
       </Field>
       <Field label="Note (optional)">
         <TextInputField label="Milestone note" value={note} onChangeText={setNote} maxLength={500} multiline />
+      </Field>
+      <Field label="Photo (optional)">
+        <PhotoSection
+          previewUri={pendingPhotoUri}
+          canUsePhotos={canUsePhotos}
+          previewLabel="Milestone photo preview"
+          onChange={(uri) => setPendingPhotoUri(uri)}
+        />
       </Field>
       {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
       <PrimaryButton label="Save milestone" onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
@@ -547,6 +658,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing(3),
   },
+  photoPreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: radius.md,
+    marginBottom: spacing(2),
+    backgroundColor: 'rgba(0,0,0,0.04)',
+  },
+  photoButtons: { gap: spacing(2) },
   title: { fontSize: 20, fontWeight: '700' },
   subtitle: { fontSize: 13, marginTop: 2, lineHeight: 18 },
   closeBtn: {
