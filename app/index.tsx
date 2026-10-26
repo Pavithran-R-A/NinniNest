@@ -1,13 +1,26 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useTheme } from '@/src/design/ThemeProvider';
 import { fontNames, radius, spacing } from '@/src/design/tokens';
 import { PrimaryButton } from '@/src/components/ui';
+import { useApp } from '@/src/state/AppProvider';
 
 export default function WelcomeScreen() {
   const t = useTheme();
+  const { status, currentBaby } = useApp();
+
+  // Returning users land here on every cold start (this is the app's root
+  // route). When a profile already exists, go straight to their journal —
+  // tapping "Begin" again would otherwise create a duplicate profile.
+  // Found in the first real device run (0.9.0): SQLite persistence worked,
+  // but the app always opened on this welcome screen after force-stop.
+  useEffect(() => {
+    if (status === 'ready' && currentBaby) {
+      router.replace('/(main)/today');
+    }
+  }, [status, currentBaby]);
 
   return (
     <View style={[styles.flex, { backgroundColor: t.canvas }]}>
