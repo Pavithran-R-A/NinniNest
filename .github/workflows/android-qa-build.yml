@@ -37,14 +37,17 @@ jobs:
       - name: Generate native project (versioned config plugins)
         run: npx expo prebuild --platform android --no-install --clean
 
-      - name: Build QA APK (debug signing)
+      # Release build: embeds the JS bundle (no Metro dev server dependency)
+      # and is signed with the debug keystore by the Expo template, so the
+      # artifact is standalone-installable. Not a production signing.
+      - name: Build QA APK (release, debug-signed)
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --console=plain
+        run: ./gradlew assembleRelease --no-daemon --console=plain
 
       - name: Locate APK and record provenance
         id: apk
         run: |
-          APK=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
+          APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
           if [ -z "$APK" ]; then echo "::error::no APK produced"; exit 1; fi
           echo "path=$APK" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$APK")" >> "$GITHUB_OUTPUT"
