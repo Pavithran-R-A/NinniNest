@@ -56,6 +56,8 @@ export class SqliteCareRepository implements CareRepository {
         kind TEXT NOT NULL,
         startedAt TEXT NOT NULL,
         side TEXT,
+        segments TEXT NOT NULL DEFAULT '[]',
+        lastSide TEXT,
         isDemo INTEGER NOT NULL DEFAULT 0
       );
     `);
@@ -73,13 +75,19 @@ export class SqliteCareRepository implements CareRepository {
       const from = Number(row.value);
       if (from < 2) await this.migrateV1toV2();
       if (from < 3) await this.migrateV2toV3();
-      if (from < SCHEMA_VERSION) {
-        await db.runAsync('UPDATE meta SET value = ? WHERE key = ?', [
-          String(SCHEMA_VERSION),
-          'schema_version',
-        ]);
-      }
     }
+    if (Number(row?.value ?? SCHEMA_VERSION) < SCHEMA_VERSION) {
+      await db.runAsync('UPDATE meta SET value = ? WHERE key = ?', [
+        String(SCHEMA_VERSION),
+        'schema_version',
+      ]);
+    }
+    // Fresh-install repair, run UNCONDITIONALLY and idempotently: the v2
+    // columns used to be added only by the v1→v2 migration, so databases
+    // created directly at v3 were missing `segments`/`lastSide` and every
+    // timer start failed (found on real device, 0.9.1). The helper is
+    // PRAGMA-guarded, so this is a no-op on correct schemas.
+    await this.migrateV1toV2();
   }
 
   private async ensurePhaseCTables(): Promise<void> {

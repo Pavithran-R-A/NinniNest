@@ -40,11 +40,14 @@ export interface ImportPlan {
  * mitigation, not a zod upgrade).
  *
  * Envelope evidence: a 100-photo backup measures ≈25 MB (tests/backupSize).
- * 300 MB ≈ a twelve-fold margin above any plausible real journal.
+ * The 64 MB cap ≈ 250 photos and ≈2.5× headroom over any plausible journal;
+ * JSON.parse of a 64 MB string peaks at several times its size in RAM, which
+ * stays within mid-range Android heap budgets. 300 MB was rejected: parse +
+ * validation + base64 decode could demand >1 GB transient memory.
  */
 export const IMPORT_LIMITS = {
-  /** Maximum JSON text length accepted for parsing. */
-  maxJsonChars: 300 * 1024 * 1024,
+  /** Maximum JSON text length accepted for parsing (chars ≈ bytes for backup payloads). */
+  maxJsonChars: 64 * 1024 * 1024,
   /** Maximum records per collection in one backup file. */
   maxPerCollection: {
     babies: 100,
