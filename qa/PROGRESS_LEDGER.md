@@ -32,11 +32,21 @@ RELEASE_EVIDENCE.md. Update after every milestone.
 2. ✅ Device verification: cold start lands on Today with prior-session data (android-11 screenshot).
 3. ✅ Final docs committed (CHANGELOG 0.9.1, FEATURE_STATUS, RELEASE_EVIDENCE final section).
 
-## REMAINING FOR FULL RELEASE (all reproducible, none blocking the branch)
-- Device sessions: reminder delivery + reboot, backup/restore with photos, timer across restart, photo capture end-to-end.
-- UI matrix: 320–412dp, Tamil long strings, dynamic type (web 360px done).
-- Localization sweep for Growth/Med/Vax/Routine form strings.
-- Play-store declarations (owner-level).
+## FINAL CERTIFICATION SESSION (2026-10-29)
+- Checkpoint `761f46d`: completed the interrupted Family sheet ScrollView fix; typecheck 0; **266/266 tests, 25 files**; pushed and remote-verified; CI run `40828923950` GREEN; android-qa-build run `40828923940` produced the exact-HEAD APK, SHA-256 `3209bc97…41cb56` verified locally byte-for-byte.
+- Device verification (Pixel_10, API 37, disposable data, APK 3209bc97…):
+  - **Timer schema repair works in place**: fresh-install-broken `active_timers` table repaired by the unconditional init pass; sleep timer starts (was "Could not start the timer").
+  - **Timer wall-clock persistence**: force-stop + 65 s → timer continued 2:33/3m from the persisted timestamp.
+  - **Single journal entry** on completion ("Sleep 3m" in Journal).
+  - **Photo persistence**: picker → crop → preview → save → force-stop → relaunch → preview renders from the managed file; Replace/Remove controls present.
+  - **Sheet ScrollView fix verified**: sheet scrolls to Save with a photo preview attached.
+- Notification DELIVERY on device: NOT TESTED this session — adb form automation was unreliable against the routine sheet (GBoard autocorrect + modal coordinate drift); scheduling logic is unit-tested and permission grant is device-verified. Recommend UI Automator/Appium for the delivery pass.
+
+## REMAINING FOR FULL RELEASE
+- Device: reminder delivery + reboot, device backup/restore with photos, timer L/R side-switch + double-tap specifics, photo capture end-to-end.
+- UI matrix: 320–412dp, Tamil long strings, dynamic type (360px web done).
+- Play declarations (owner-level).
+
 
 
 ## BLOCKED / NOT EXECUTABLE
