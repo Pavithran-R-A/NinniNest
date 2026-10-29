@@ -339,6 +339,10 @@ export default function FamilyScreen() {
         <View style={styles.sheetBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
           <View style={[styles.sheet, { backgroundColor: t.canvas }]}>
+            {/* Scrollable: with a photo preview attached the form exceeds the
+                sheet's maxHeight and the save button would be unreachable
+                (found on device, 0.9.1). */}
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetScroll}>
             {saveError ? <Text style={{ color: t.cinnamon, marginBottom: 12 }}>{saveError}</Text> : null}
             {sheet === 'baby' && (
               <BabyForm
@@ -498,6 +502,7 @@ export default function FamilyScreen() {
                 }}
               />
             )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1037,5 +1042,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(4),
     paddingTop: spacing(2),
     maxHeight: '88%',
+  },
+  sheetScroll: {
+    paddingBottom: spacing(2),
   },
 });
