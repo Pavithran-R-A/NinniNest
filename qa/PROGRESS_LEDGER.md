@@ -42,6 +42,11 @@ RELEASE_EVIDENCE.md. Update after every milestone.
   - **Sheet ScrollView fix verified**: sheet scrolls to Save with a photo preview attached.
 - Notification DELIVERY on device: NOT TESTED this session — adb form automation was unreliable against the routine sheet (GBoard autocorrect + modal coordinate drift); scheduling logic is unit-tested and permission grant is device-verified. Recommend UI Automator/Appium for the delivery pass.
 
+## EXACT-HEAD ARTIFACT & DOCS (2026-10-29, final)
+- Exact-HEAD APK for `82abf95`: run `40930579278` SUCCESS (25m54s), artifact `ninninest-qa-apk-82abf9502a6045fe6b22fac49689b65df248a050`, SHA-256 `c88da4bf502cccfeb151e349bcb0d70093902b4fa4f9b9e06e01accc23201c07` — local download verified byte-for-byte against the runner. (App code identical to the device-verified `79b48a02…`/`3209bc97…` builds; `82abf95` differs only in en/ta form strings, the 64 MB import cap, and docs.)
+- README "Honest status" rewritten to current reality (APK pipeline, device-verified rows, 266 tests); issue #1 evidence comment posted (github.com/Pavithran-R-A/NinniNest/issues/1#issuecomment-6505133496) — issue kept OPEN pending notification-delivery + physical-device verification.
+- Discarded: the 300 MB import cap (replaced by 64 MB); unused `expo-build-properties` dev install.
+
 ## TEST B — DEVICE BACKUP/RESTORE VERIFIED (2026-10-29, Pixel_10, disposable data)
 Exact-HEAD APK `79b48a02…dade` (commit `57cb01d`, run `40903498502`) — SHA-256 verified locally before install.
 - Dataset on device: TestAru (photo + 2 events) + TestIni (photo + medication + administration) — multi-baby.

@@ -52,14 +52,23 @@ Web export requires the bundled `metro.config.js` (adds `.wasm` asset support fo
 
 ## Honest status
 
-Feature-complete through Phase E: care logging, timers, multi-baby family features,
-analytics, CSV export, and photo-inclusive v4 backups with hash-verified restore.
-Remaining work is tracked in `FEATURE_STATUS.md` and `docs/KNOWN_LIMITATIONS.md`.
-No APK has been produced (EAS authentication unavailable in the build environment) —
-owner build commands are in `docs/ANDROID_BUILD.md`, and the device verification
-checklist is `docs/DEVICE_TEST_MATRIX.md`. Sleep/breast timers restore from persisted
-timestamps and were unit-tested for the underlying maths, but cross-timezone behaviour
-on a real device still needs manual verification.
+Feature-complete through 0.9.1 (2026-10-29): care logging, timers with wall-clock
+restart persistence, multi-baby family features, analytics, CSV + zipped CSV export,
+photo-inclusive v5 backups (genuine SHA-256 of decoded bytes, versioned hash metadata),
+a staged crash-recoverable restore, and full en/Tamil form localization.
+
+**Android is real**: an installable QA APK is built on GitHub-hosted runners from every
+push to the release branch (`.github/workflows/android-qa-build.yml`, debug-signed,
+SHA-256 recorded in the run summary). Device verification on an API 37 emulator covers
+onboarding, quick-log, timers across force-stop, photo pick/persist, multi-baby
+backup/restore with embedded photos, tampered-backup rejection, and returning-user
+routing — see `docs/DEVICE_TEST_MATRIX.md` for the row-by-row VERIFIED/NOT TESTED record
+and `RELEASE_EVIDENCE.md` for provenance. Remaining device rows (notification delivery,
+reboot recovery, physical-hardware pass) are tracked in `docs/KNOWN_LIMITATIONS.md`.
+
+CI runs strict typecheck, the full Vitest suite (266 tests), the web export, and a
+dependency-advisory report on every push. `docs/ANDROID_BUILD.md` documents how the
+NDK/toolchain is pinned via the versioned `plugins/withNdkVersion` config plugin.
 
 ## Free-forever promise
 
