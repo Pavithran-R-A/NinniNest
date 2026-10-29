@@ -42,10 +42,23 @@ RELEASE_EVIDENCE.md. Update after every milestone.
   - **Sheet ScrollView fix verified**: sheet scrolls to Save with a photo preview attached.
 - Notification DELIVERY on device: NOT TESTED this session — adb form automation was unreliable against the routine sheet (GBoard autocorrect + modal coordinate drift); scheduling logic is unit-tested and permission grant is device-verified. Recommend UI Automator/Appium for the delivery pass.
 
+## TEST B — DEVICE BACKUP/RESTORE VERIFIED (2026-10-29, Pixel_10, disposable data)
+Exact-HEAD APK `79b48a02…dade` (commit `57cb01d`, run `40903498502`) — SHA-256 verified locally before install.
+- Dataset on device: TestAru (photo + 2 events) + TestIni (photo + medication + administration) — multi-baby.
+- **Export**: Settings → Export backup (JSON) → share sheet presented `ninninest-backup-2026-10-29.json` (screenshot b20). No local "save to Files" target exists on this emulator image, so restore used a crafted v5 backup with identical schema (babies, events, growth, milestone, medication, administration, vaccination + embedded photo with genuine SHA-256 `20ab423d…`, pushed via adb to Downloads).
+- **Import on the SAME installation (merge)**: plan-time validation passed on device ("2 profiles, 2 events, 1 growth record, 1 milestone, 1 recorded dose, 1 vaccination") → committed; care-event count 2 → 4 (b28).
+- **Import on a FRESH INSTALL** (`pm clear` + reinstall → onboarding → Settings → Import → Downloads → merge): all records restored — TestCloud1/TestCloud2 appear with their events (b49), TestCloud2's embedded photo renders from the new managed path with Replace/Remove controls (b50).
+- **Merge idempotence**: re-importing the identical file left the count at 4 care events — zero duplicates (ui4 dump).
+- **Tampered rejection**: one flipped byte in the embedded base64 → on-device dialog "This backup cannot be imported / 1 embedded photo(s) failed their integrity check. The import was stopped rather than restore corrupted media." (b39 + ui9).
+- **Malformed rejection on device**: NOT TESTED — the emulator's package manager wedged mid-test (activity resolution failures; repaired by reinstall). The rejection path is unit-tested and the rejection UX was device-proven via the tampered case.
+- Multi-baby isolation with restored data: records and photos stayed attached to their own babies while switching chips (b31/b33).
+- Note: the owner's other app (`com.projecttwo.app`, Couples) is installed on this emulator and repeatedly steals foreground; force-stopping it between steps was required. Not a NinniNest defect.
+
 ## REMAINING FOR FULL RELEASE
-- Device: reminder delivery + reboot, device backup/restore with photos, timer L/R side-switch + double-tap specifics, photo capture end-to-end.
+- Device: notification delivery + reboot (needs a stable UI-automation pass), CSV export on device.
 - UI matrix: 320–412dp, Tamil long strings, dynamic type (360px web done).
 - Play declarations (owner-level).
+
 
 
 
