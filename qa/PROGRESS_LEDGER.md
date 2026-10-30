@@ -42,6 +42,24 @@ RELEASE_EVIDENCE.md. Update after every milestone.
   - **Sheet ScrollView fix verified**: sheet scrolls to Save with a photo preview attached.
 - Notification DELIVERY on device: NOT TESTED this session — adb form automation was unreliable against the routine sheet (GBoard autocorrect + modal coordinate drift); scheduling logic is unit-tested and permission grant is device-verified. Recommend UI Automator/Appium for the delivery pass.
 
+## TEST D — NOTIFICATIONS (2026-10-30 continuation, Pixel_10, disposable data)
+| Row | Status | Evidence |
+| --- | --- | --- |
+| Permission granted at launch | VERIFIED | system dialog captured (android-02), Allow tapped |
+| Notification channel created | VERIFIED | `dumpsys notification`: `NotificationChannel{mId='routine-reminders', mName='Routine reminders', importance=3}` registered in system settings |
+| Routine saved with correct time | VERIFIED | "01:09 · Delivery", "01:20 · Deliver2", "12:58 · Nap" — all in the Routines list with correct HH:mm (screenshots d12/d16) |
+| Actual reminder SCHEDULED | VERIFIED | `dumpsys alarm`: `RTC_WAKEUP origWhen=2026-10-30 01:20:00` exact alarm for Deliver2, plus next-occurrence alarms Oct 31/Nov 1 per routine; 33 expo notification alarm entries |
+| Actual notification DELIVERED | NOT TESTED | the 01:20 alarm FIRED (fired-section in dumpsys; rescheduled to Oct 31/Nov 1) **while the app was in the FOREGROUND** — expo-notifications suppresses tray delivery for foreground occurrences (documented platform behavior). The backgrounded-delivery pass was then blocked: disk exhaustion (737 MB free) killed the emulator mid-session |
+| Reboot persistence of app data | VERIFIED | full OS reboot → app launches to Today with all records intact (c01) |
+| Demo isolation of scheduling | VERIFIED (code) | resync skips demo realm (src/state/AppProvider.tsx) |
+| Informational-only | VERIFIED (code) | syncRoutineNotifications never writes records |
+
+## REMAINING FOR FULL RELEASE
+- Device: notification delivery with the app BACKGROUNDED (needs ≥2 GB free disk for the emulator), CSV export capture on device, malformed-JSON rejection on device.
+- UI matrix: 320–412dp, Tamil long strings, dynamic type (360px web done).
+- Play declarations (owner-level).
+
+
 ## EXACT-HEAD ARTIFACT & DOCS (2026-10-29, final)
 - Exact-HEAD APK for `82abf95`: run `40930579278` SUCCESS (25m54s), artifact `ninninest-qa-apk-82abf9502a6045fe6b22fac49689b65df248a050`, SHA-256 `c88da4bf502cccfeb151e349bcb0d70093902b4fa4f9b9e06e01accc23201c07` — local download verified byte-for-byte against the runner. (App code identical to the device-verified `79b48a02…`/`3209bc97…` builds; `82abf95` differs only in en/ta form strings, the 64 MB import cap, and docs.)
 - README "Honest status" rewritten to current reality (APK pipeline, device-verified rows, 266 tests); issue #1 evidence comment posted (github.com/Pavithran-R-A/NinniNest/issues/1#issuecomment-6505133496) — issue kept OPEN pending notification-delivery + physical-device verification.
