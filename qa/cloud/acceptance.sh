@@ -142,6 +142,11 @@ PY
 }
 
 echo "=== 1. cold launch + permission + onboarding ==="
+# Cloud-runner ANRs: the Pixel Launcher ANRs chronically under 2-core KVM
+# contention (dumps in run 7 show its dialog stealing the active window
+# every ~20-30 s; "Wait" only postpones). Hiding system error/ANR dialogs
+# keeps the app window dumpable and tappable for the whole run.
+adb shell settings put secure hide_error_dialogs 1
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 sleep 12
 shot "01-launch"
