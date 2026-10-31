@@ -1,9 +1,44 @@
-# Device test matrix — Phase E, updated Stage 2B (2026-10-26)
+# Device test matrix — consolidated 2026-10-31 (historical sections below)
 
 Labels: **VERIFIED** = proven with real evidence in this environment; **FAILED** = ran
 and failed; **NOT TESTED** = could not run here (no device, emulator, or browser
 rendering tool). Nothing is labelled VERIFIED without an exit code or a unit test
 behind it.
+
+## Consolidated Android state (2026-10-31, Pixel_10 API 37 emulator + cloud API 34 KVM runner)
+
+Evidence: `qa/screenshots/android-*`, `b*`, `c*`, `d*`, `u*` (local device passes),
+`qa/cloud/evidence-*/` (cloud artifacts). APK provenance: every installed APK was
+SHA-256-verified locally against its exact-SHA CI run before install.
+
+| Capability | Status | Evidence |
+| --- | --- | --- |
+| Cold start lands on Today (returning) / welcome (first run) | VERIFIED | android-11; cloud run 4 welcome PASS |
+| Onboarding → profile → Today | VERIFIED | android-05/06; cloud run 4 through name+DOB typing |
+| Quick-log diaper → dashboard + ribbon | VERIFIED | android-08; cloud run 4 section 2 |
+| Timer start/pause/resume/finish; single journal entry | VERIFIED | Test C (c02–c06) |
+| Breastfeed L/R switch mid-timer with segments | VERIFIED | Test C (c02–c06) |
+| Timer wall-clock persistence across force-stop | VERIFIED | 65 s force-stop → 2:33/3m continued (Test C) |
+| Timer + data across full OS reboot | VERIFIED | c01 |
+| Photo pick → managed copy → force-stop → renders | VERIFIED | u-series screenshots |
+| Export via share sheet | VERIFIED | b20 (share sheet presented) |
+| Import merge, same install | VERIFIED | b28 (2 → 4 events) |
+| Merge idempotence (re-import → no duplicates) | VERIFIED | ui4 dump |
+| Fresh-install import restore + embedded photo renders | VERIFIED | b49/b50 |
+| Tampered photo byte → rejection dialog, nothing written | VERIFIED | b39 + ui9 |
+| Multi-baby isolation after restore | VERIFIED | b31/b33 |
+| Routine alarm SCHEDULED (RTC_WAKEUP) | VERIFIED | dumpsys alarm (d-series) |
+| Notification DELIVERED to tray, app backgrounded | NOT TESTED on device; foreground occurrence suppressed (documented expo behavior); cloud run 5 section 4 targets this |
+| Notification permission denial path | NOT TESTED (grant path verified android-02) |
+| Alarm re-fires after reboot | NOT TESTED (data persistence across reboot verified c01) |
+| Import replace-all (erase) semantics | NOT TESTED on device (merge proven; replace unit-tested) |
+| Malformed-JSON import rejection via real picker | NOT TESTED on device (tampered case proven; cloud run 5 section 6 targets malformed case) |
+| CSV export capture on device | NOT TESTED |
+| Delete-baby cascade (9 tables) | NOT TESTED on device (unit-tested) |
+| 320–412dp widths on device | NOT TESTED (360px web verified; cloud density pass candidate) |
+| Physical hardware pass | NOT TESTED |
+
+## Historical: Phase E automated table (2026-10-26; test counts superseded — 266/266 as of 2026-10-31)
 
 ## Verified in this environment (automated)
 
