@@ -85,5 +85,17 @@ Exact-HEAD APK `79b48a02…dade` (commit `57cb01d`, run `40903498502`) — SHA-2
 
 
 
+## CLOUD-EMULATOR ACCEPTANCE (TASK 1, 2026-10-31, workflow_dispatch + scoped push trigger)
+Reuses the exact-source QA APK artifact (run 41092946811, SHA 33f1c3a70f…) — no rebuild; KVM ubuntu runner; synthetic data only; 7-day-retention evidence artifacts.
+| Run | Commit | Result | Diagnosis → fix (each fix committed before the next run) |
+| --- | --- | --- | --- |
+| 41179307910 | 63e0917 | FAIL onboarding | GBoard stays shown after Enter on API 34 → second tap used pre-keyboard bounds; DOB text landed in Nickname. Fix: `kb_visible`/`hide_kb` guard (005e47f) |
+| 41180088266 | 005e47f | FAIL onboarding | DOB bounds captured mid-reflow after keyboard dismissal. Fix: `stable_edit` two-identical-dumps poll (6512f3e) |
+| 41180941210 | 6512f3e | FAIL welcome | **"Pixel Launcher isn't responding" ANR dialog** covered the app at cold boot (cloud-runner slowness, not an app defect — app visible and correct behind the dialog). Fix: `wait_for_text` now detects ANR dialogs and taps "Wait" (c263c2a) |
+| 41182670787 | c263c2a | FAIL onboarding | ANR guard worked (welcome PASS). Two residual defects: (1) script waited for "Create profile" — a label that exists only on the Family new-baby sheet (`FamilyForms.tsx:232`), while onboarding's button is "Begin the journal" (`strings.ts` 'onb.begin'); (2) `stable_edit` returned a silent EMPTY coordinate when its python crashed (empty == initial prev → instant return; log gap 2.7 s proves the poll loop never ran), so the DOB tap never happened and the date was appended to Nickname. Fix: verified every scripted label against source ("Begin the journal", "Add a baby", "Create profile" only on family sheet), folded stability polling into `type_edit` with explicit ABSENT handling, `errors='replace'` in all dump readers (536af77) |
+| 41183726027 | 536af77 | (in flight) | full flow: onboarding → diaper → baby 2 → routine + backgrounded notification → force-stop persistence → malformed-JSON rejection |
+
+Harness capability proven so far: cold launch, system-permission grant, ANR recovery, text-bound tapping, keyboard-aware typing, dumpsys alarm/notification inspection, force-stop, push-file + picker navigation.
+
 ## BLOCKED / NOT EXECUTABLE
 - Local Gradle builds (disk); EAS (no account); real expo-sqlite runtime (needs device/APK).
