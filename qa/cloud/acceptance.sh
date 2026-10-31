@@ -33,9 +33,21 @@ if [ "${SELFTEST:-0}" = "1" ]; then
   exit 1
 fi
 
-shot() { timeout 60 adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null || true; }
+shot() { local n="${1//:/_}"; timeout 60 adb exec-out screencap -p > "$OUT/$n.png" 2>/dev/null || true; }
 pass() { PASS=$((PASS + 1)); echo "PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "FAIL: $1"; shot "FAIL-$1"; timeout 20 adb logcat -d -b crash > "$OUT/crash-last.txt" 2>/dev/null || true; }
+
+# Alarm registration is async (7 weekly triggers are scheduled one by one):
+# poll before declaring failure.
+wait_for_alarm() { # <HH:MM>
+  for _ in 1 2 3 4 5; do
+    if timeout 30 adb shell dumpsys alarm 2>/dev/null | grep -qE "RTC_WAKEUP.*$1"; then
+      return 0
+    fi
+    sleep 3
+  done
+  return 1
+}
 
 SEQ=0
 dump() {
@@ -351,7 +363,8 @@ if wait_for_text "Family" 6; then
       # crop screen (run 16: the confirm control is labelled "CROP")
       tap_text "CROP" || tap_text "Save" || tap_desc "Done" || tap_text "Done" || tap_text "OK" || true
       sleep 3
-      if tap_text "Save changes"; then
+      # the save button can sit below the sheet fold
+      if scroll_to_text "Save changes"; then
         sleep 4
         if dump_has "Remove photo" || dump_has "Replace photo"; then
           pass "photo attached to QA1"
@@ -428,8 +441,11 @@ if wait_for_text "Routines" 6; then
   fi
   if [ "$SAVED" = "1" ]; then
     pass "routine saved and listed"
-    timeout 30 adb shell dumpsys alarm 2>/dev/null | grep -qE "RTC_WAKEUP.*$TARGET"
-    if [ $? -eq 0 ]; then pass "alarm scheduled for $TARGET"; else fail "alarm scheduled for $TARGET"; fi
+    if wait_for_alarm "$TARGET"; then
+      pass "alarm scheduled for $TARGET"
+    else
+      fail "alarm scheduled for $TARGET"
+    fi
     timeout 30 adb shell input keyevent 3
     sleep 2
     echo "app backgrounded; waiting for $TARGET plus margin"

@@ -20,9 +20,19 @@ if [ "${SELFTEST:-0}" = "1" ]; then
   echo "SELFTEST BROKEN"; exit 1
 fi
 
-shot() { timeout 60 adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null || true; }
+shot() { local n="${1//:/_}"; timeout 60 adb exec-out screencap -p > "$OUT/$n.png" 2>/dev/null || true; }
 pass() { PASS=$((PASS + 1)); echo "PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "FAIL: $1"; shot "FAIL-$1"; timeout 20 adb logcat -d -b crash > "$OUT/crash-last.txt" 2>/dev/null || true; }
+
+wait_for_alarm() { # <HH:MM> — registration is async; poll before failing
+  for _ in 1 2 3 4 5; do
+    if timeout 30 adb shell dumpsys alarm 2>/dev/null | grep -qE "RTC_WAKEUP.*$1"; then
+      return 0
+    fi
+    sleep 3
+  done
+  return 1
+}
 
 SEQ=0
 dump() {
@@ -200,8 +210,11 @@ echo "=== E2. reboot persistence + alarm rescheduling ==="
 if onboard "QA5" "2026-08-01"; then
   if add_routine "BootNap"; then
     TGT="$ROUTINE_TARGET"
-    timeout 30 adb shell dumpsys alarm 2>/dev/null | grep -qE "RTC_WAKEUP.*$TGT"
-    if [ $? -eq 0 ]; then pass "alarm scheduled pre-reboot ($TGT)"; else fail "alarm scheduled pre-reboot"; fi
+    if wait_for_alarm "$TGT"; then
+      pass "alarm scheduled pre-reboot ($TGT)"
+    else
+      fail "alarm scheduled pre-reboot"
+    fi
     echo "rebooting emulator"
     timeout 30 adb reboot
     BOOTED=0
@@ -221,8 +234,7 @@ if onboard "QA5" "2026-08-01"; then
       else
         fail "app data survives reboot"
       fi
-      timeout 30 adb shell dumpsys alarm 2>/dev/null | grep -qE "RTC_WAKEUP.*$TGT"
-      if [ $? -eq 0 ]; then
+      if wait_for_alarm "$TGT"; then
         pass "routine alarm rescheduled after reboot (RECEIVE_BOOT_COMPLETED)"
       else
         fail "routine alarm rescheduled after reboot"
@@ -254,6 +266,11 @@ if onboard "QA6" "2026-08-02"; then
     fi
   else
     fail "routine flow under denial"
+  fi
+  # the routine flow ends on the Family tab; the functionality check is the
+  # Today screen
+  if wait_for_text "Today" 6; then
+    sleep 2
   fi
   if dump_has "QUICK LOG"; then
     pass "app functional with denied permission"
