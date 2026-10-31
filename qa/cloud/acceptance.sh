@@ -347,9 +347,9 @@ if wait_for_text "Family" 6; then
       # taken on ..."), not the file name; the first Recent cell sits at a
       # fixed position on the pixel_5 profile
       tap_desc "qa-photo.png" || tap_text "qa-photo.png" || timeout 30 adb shell input tap 177 1583 || true
-      sleep 5
-      # crop screen (allowsEditing) if it appears: try the confirm labels
-      tap_text "Save" || tap_desc "Done" || tap_text "Done" || tap_text "OK" || tap_desc "Save" || true
+      sleep 6
+      # crop screen (run 16: the confirm control is labelled "CROP")
+      tap_text "CROP" || tap_text "Save" || tap_desc "Done" || tap_text "Done" || tap_text "OK" || true
       sleep 3
       if tap_text "Save changes"; then
         sleep 4
@@ -400,10 +400,12 @@ if wait_for_text "Routines" 6; then
   echo "target delivery time: $TARGET"
   sleep 1
   # the time input is the form's second EditText and ships a default value;
-  # no-commit typing + ESCAPE (111) — Enter/BACK can close the sheet and pop
-  # the tab stack (run 15: form vanished to Today)
+  # no-commit typing (no Enter) then hide_kb — the keyboard is genuinely
+  # shown here, so BACK closes only the IME and never the sheet (Enter had
+  # already hidden it in run 15, which is what made the same BACK close the
+  # sheet and pop the tab stack)
   type_edit 1 "$TARGET" 1 1 || fail "routine time entry"
-  timeout 30 adb shell input keyevent 111 || true
+  hide_kb
   sleep 1.5
   if ! tap_text "Save routine"; then
     # save button may sit below the sheet fold
@@ -580,7 +582,13 @@ if [ "$ROUNDTRIP" = "1" ]; then
     sleep 2
     if scroll_to_text "Import a backup"; then
       if pick_download_file "$EXPORT_NAME"; then
-        sleep 4
+        sleep 5
+        # the file tap can race the picker's list load: if the review dialog
+        # did not open, the picker is still up — re-tap the file once
+        if ! wait_for_text "Review this import" 6; then
+          tap_text "$EXPORT_NAME" || true
+          sleep 4
+        fi
         if wait_for_text "Review this import" 6; then
           pass "import review dialog shows the real file"
           tap_text "IMPORT" || tap_text "Import"
@@ -640,7 +648,11 @@ if [ "$ROUNDTRIP" = "1" ]; then
     scroll_to_text "Replace all" || fail "replace-all mode toggle"
     if scroll_to_text "Import a backup"; then
       if pick_download_file "$EXPORT_NAME"; then
-        sleep 4
+        sleep 5
+        if ! wait_for_text "Review this import" 6; then
+          tap_text "$EXPORT_NAME" || true
+          sleep 4
+        fi
         if wait_for_text "Review this import" 6; then
           tap_text "IMPORT" || tap_text "Import"
           sleep 6
