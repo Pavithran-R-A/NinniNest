@@ -302,7 +302,8 @@ if wait_for_text "Routines" 6; then
     sleep 2
     echo "app backgrounded; waiting for $TARGET plus margin"
     NOWM=$(timeout 30 adb shell date +%M | tr -d '\r')
-    WAIT=$(( (10#$NOWM - 10#$MM + 60) % 60 ))
+    WAIT=$(( (10#$MM - 10#$NOWM + 60) % 60 ))   # minutes until the target
+    if [ "$WAIT" -gt 4 ]; then WAIT=4; fi        # target was now+2min; never wait longer
     sleep $((WAIT * 60 + 45))
     timeout 30 adb shell dumpsys notification --noredact > "$OUT/notification-dump.txt" 2>/dev/null
     if grep -q "routine-reminders" "$OUT/notification-dump.txt" && grep -qE "NotificationRecord\(.*$PKG" "$OUT/notification-dump.txt"; then
