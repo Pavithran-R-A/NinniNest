@@ -104,10 +104,19 @@ PY
   return 0
 }
 
-wait_for_text() { # poll up to N seconds for text to appear
+wait_for_text() { # poll up to N seconds; dismisses system ANR dialogs while polling
   local text="$1" tries="${2:-10}"
   for _ in $(seq 1 "$tries"); do
     if tap_text "$text"; then return 0; fi
+    dump
+    if python3 - /tmp/acc.xml <<'PY'
+import re, sys, os
+s = open(os.environ.get('ACC', '/tmp/acc.xml'), encoding='utf-8').read()
+sys.exit(0 if "isn't responding" in s else 1)
+PY
+    then
+      tap_text "Wait" || true
+    fi
     sleep 2
   done
   return 1
