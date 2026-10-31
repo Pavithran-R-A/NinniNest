@@ -6,6 +6,12 @@ name: android-acceptance
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - release/ninninest-safety-zcode-20261026
+    paths:
+      - '.github/workflows/android-acceptance.yml'
+      - 'qa/cloud/**'
 
 permissions:
   contents: read
