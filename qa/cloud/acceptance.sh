@@ -4,7 +4,7 @@
 # Technique: uiautomator dump -> locate text bounds -> tap center. No blind coordinates.
 set -u
 OUT=qa-cloud
-mkdir -p "$OUT"
+mkdir -p "$OUT/dumps"
 PASS=0
 FAIL=0
 PKG=app.ninninest.journal
@@ -13,9 +13,23 @@ shot() { adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null || true; }
 pass() { PASS=$((PASS + 1)); echo "PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "FAIL: $1"; shot "FAIL-$1"; }
 
+SEQ=0
 dump() {
-  adb shell uiautomator dump /sdcard/acc.xml >/dev/null 2>&1
-  adb shell cat /sdcard/acc.xml > /tmp/acc.xml 2>/dev/null
+  SEQ=$((SEQ + 1))
+  local d_out d_file="/sdcard/acc-$SEQ.xml"
+  for _ in 1 2 3; do
+    d_out=$(adb shell uiautomator dump "$d_file" 2>&1)
+    if printf '%s' "$d_out" | grep -qi "dumped to"; then
+      adb shell cat "$d_file" > /tmp/acc.xml 2>/dev/null
+      gzip -c /tmp/acc.xml > "$OUT/dumps/$(printf '%03d' $SEQ).xml.gz" 2>/dev/null || true
+      adb shell rm -f "$d_file" >/dev/null 2>&1
+      return 0
+    fi
+    sleep 1.5
+  done
+  echo "DUMP-FAILED after retries: $d_out"
+  printf 'DUMP-FAILED' > /tmp/acc.xml
+  return 1
 }
 
 # Dismiss the soft keyboard only when it is actually shown (a blind back
@@ -124,14 +138,34 @@ if wait_for_text "Begin without an account" 8; then
 else
   fail "welcome screen"; shot "01b"; exit 1
 fi
-tap_text "Begin without an account"
 sleep 3
-type_edit 0 "QA1" && pass "baby name typed" || fail "baby name input"
+if ! type_edit 0 "QA1"; then
+  # Recovery: cold-restart the app (clears UI-automation/accessibility wedges)
+  # and redo the welcome -> form path once.
+  echo "input absent; restarting app once"
+  adb shell am force-stop $PKG
+  sleep 2
+  adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+  sleep 10
+  tap_text "Allow" || true
+  if wait_for_text "Begin without an account" 8; then
+    sleep 3
+    type_edit 0 "QA1" && pass "baby name typed (after restart)" || { fail "baby name input"; shot "02"; exit 1; }
+  else
+    fail "baby name input"; shot "02"; exit 1
+  fi
+else
+  pass "baby name typed"
+fi
 type_edit 1 "2026-08-14" && pass "dob typed" || fail "dob input"
 if wait_for_text "Begin the journal" 6; then
+  sleep 2
   tap_text "Begin the journal"
-  sleep 4
-  pass "profile created"
+  if wait_for_text "QUICK LOG" 8; then
+    pass "profile created"
+  else
+    fail "profile created (no Today screen)"; shot "02"; exit 1
+  fi
 else
   fail "begin-the-journal button"; shot "02"; exit 1
 fi
@@ -155,7 +189,7 @@ if wait_for_text "Family" 6; then
   tap_text "Family"
   sleep 2
   tap_text "Add a baby" && pass "add a baby opened" || fail "add a baby"
-  sleep 2
+  sleep 3
   type_edit 0 "QA2" || fail "QA2 name"
   type_edit 1 "2026-09-10" && pass "QA2 dob typed" || fail "QA2 dob input"
   tap_text "Create profile"
