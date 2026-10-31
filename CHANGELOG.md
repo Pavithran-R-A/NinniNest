@@ -2,6 +2,12 @@
 
 ## 0.9.1 — 2026-10-26 (first real Android run: two P0/P1 defects found and fixed)
 
+> Identity alignment (2026-10-31): the 0.9.1 device fixes above shipped in QA
+> APKs that still identified as 0.9.0/versionCode 2. `app.json` now carries
+> version 0.9.1 / versionCode 3 so the installable identity matches the
+> documented release; APKs already verified on device remain correctly recorded
+> under their as-built identity (0.9.0/2) in the evidence ledger.
+
 ### Fixed
 - **Native record creation was broken** (found in the first real device run):
   Hermes does not implement `crypto.randomUUID` and no polyfill was installed,
