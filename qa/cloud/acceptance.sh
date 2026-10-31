@@ -30,33 +30,6 @@ hide_kb() {
   fi
 }
 
-# Poll until two consecutive dumps report identical EditText bounds
-# (layout settles after the keyboard reflow). Prints "x y" of the Nth
-# input, 0-based.
-stable_edit() {
-  local idx="$1" prev="" cur=""
-  for _ in 1 2 3 4 5; do
-    dump
-    cur=$(IDX="$idx" python3 - <<'PY'
-import re, sys, os
-idx = int(os.environ['IDX'])
-s = open('/tmp/acc.xml', encoding='utf-8').read()
-ets = re.findall(r'class="android\.widget\.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', s)
-if idx >= len(ets):
-    print('ABSENT')
-    sys.exit(0)
-b = [int(x) for x in re.findall(r'\d+', ets[idx])]
-print((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
-PY
-)
-    if [ "$cur" = "ABSENT" ]; then sleep 2; continue; fi
-    if [ "$cur" = "$prev" ]; then echo "$cur"; return 0; fi
-    prev="$cur"
-    sleep 2
-  done
-  echo "$cur"
-}
-
 # Tap the center of the node whose visible text matches exactly. Returns 1 if absent.
 tap_text() {
   dump
@@ -64,7 +37,7 @@ tap_text() {
   xy=$(TEXT="$1" python3 - <<'PY'
 import re, sys, os
 text = os.environ['TEXT']
-s = open('/tmp/acc.xml', encoding='utf-8').read()
+s = open('/tmp/acc.xml', encoding='utf-8', errors='replace').read()
 m = re.search(r'text="' + re.escape(text) + r'"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', s)
 if not m:
     print('NOT_FOUND')
@@ -79,25 +52,34 @@ PY
 }
 
 # Type into the Nth on-screen EditText (0-based) and commit with Enter.
+# Waits until two consecutive dumps report identical bounds before tapping
+# (the layout settles after a keyboard reflow); never returns a silent
+# empty coordinate — ABSENT is explicit and the caller can fail on it.
 type_edit() {
-  local idx="$1" value="$2"
-  dump
-  local xy
-  xy=$(IDX="$idx" VALUE="$value" python3 - <<'PY'
+  local idx="$1" value="$2" prev="INIT" cur=""
+  for _ in 1 2 3 4 5 6; do
+    dump
+    cur=$(IDX="$idx" python3 - <<'PY'
 import re, sys, os
 idx = int(os.environ['IDX'])
-s = open('/tmp/acc.xml', encoding='utf-8').read()
+s = open('/tmp/acc.xml', encoding='utf-8', errors='replace').read()
 ets = re.findall(r'class="android\.widget\.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', s)
 if idx >= len(ets):
-    print('NOT_FOUND')
-    sys.exit(2)
+    print('ABSENT')
+    sys.exit(0)
 b = [int(x) for x in re.findall(r'\d+', ets[idx])]
 print((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
 PY
 )
-  if [ "$xy" = "NOT_FOUND" ]; then return 1; fi
-  adb shell input tap $xy
-  sleep 1
+    if [ -z "$cur" ]; then cur="ABSENT"; fi
+    if [ "$cur" = "ABSENT" ]; then sleep 2; continue; fi
+    if [ "$cur" = "$prev" ]; then break; fi
+    prev="$cur"
+    sleep 2
+  done
+  if [ -z "$cur" ] || [ "$cur" = "ABSENT" ]; then return 1; fi
+  adb shell input tap $cur
+  sleep 1.5
   adb shell input text "$value"
   adb shell input keyevent 66
   hide_kb
@@ -111,7 +93,7 @@ wait_for_text() { # poll up to N seconds; dismisses system ANR dialogs while pol
     dump
     if python3 - /tmp/acc.xml <<'PY'
 import re, sys, os
-s = open(os.environ.get('ACC', '/tmp/acc.xml'), encoding='utf-8').read()
+s = open(os.environ.get('ACC', '/tmp/acc.xml'), encoding='utf-8', errors='replace').read()
 sys.exit(0 if "isn't responding" in s else 1)
 PY
     then
@@ -127,7 +109,7 @@ dump_has() {
   python3 - "$1" /tmp/acc.xml <<'PY'
 import re, sys, os
 needle = sys.argv[1]
-s = open(sys.argv[2], encoding='utf-8').read()
+s = open(sys.argv[2], encoding='utf-8', errors='replace').read()
 sys.exit(0 if needle in s else 1)
 PY
 }
@@ -145,19 +127,13 @@ fi
 tap_text "Begin without an account"
 sleep 3
 type_edit 0 "QA1" && pass "baby name typed" || fail "baby name input"
-xy=$(stable_edit 1)
-echo "dob field: $xy"
-adb shell input tap $xy
-sleep 1
-adb shell input text "2026-08-14"
-hide_kb
-sleep 1
-if wait_for_text "Create profile" 6; then
-  tap_text "Create profile"
+type_edit 1 "2026-08-14" && pass "dob typed" || fail "dob input"
+if wait_for_text "Begin the journal" 6; then
+  tap_text "Begin the journal"
   sleep 4
   pass "profile created"
 else
-  fail "create profile button"; shot "02"; exit 1
+  fail "begin-the-journal button"; shot "02"; exit 1
 fi
 
 echo "=== 2. quick-log diaper ==="
@@ -178,16 +154,10 @@ echo "=== 3. second baby QA2 ==="
 if wait_for_text "Family" 6; then
   tap_text "Family"
   sleep 2
-  tap_text "Add another child" && pass "add another child opened" || fail "add another child"
+  tap_text "Add a baby" && pass "add a baby opened" || fail "add a baby"
   sleep 2
   type_edit 0 "QA2" || fail "QA2 name"
-  xy=$(stable_edit 1)
-  echo "dob field: $xy"
-  adb shell input tap $xy
-  sleep 1
-  adb shell input text "2026-09-10"
-  hide_kb
-  sleep 1
+  type_edit 1 "2026-09-10" && pass "QA2 dob typed" || fail "QA2 dob input"
   tap_text "Create profile"
   sleep 4
   if dump_has "QA2"; then pass "second baby created"; else fail "second baby created"; fi
