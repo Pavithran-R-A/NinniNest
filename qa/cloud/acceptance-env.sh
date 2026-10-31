@@ -128,8 +128,14 @@ PY
     for _ in 1 2 3 4 5 6 7 8; do timeout 30 adb shell input keyevent 67; done
   fi
   timeout 30 adb shell input text "$value"
-  timeout 30 adb shell input keyevent 66
-  hide_kb
+  # nocommit mode (4th arg): leave the keyboard up and the navigation stack
+  # untouched — on modal sheets Enter+BACK can close the sheet and pop the
+  # tab stack (observed in run 15: routine form vanished to Today). The
+  # caller dismisses the keyboard with ESCAPE (keyevent 111) instead.
+  if [ "${4:-0}" != "1" ]; then
+    timeout 30 adb shell input keyevent 66
+    hide_kb
+  fi
   return 0
 }
 onboard() { # <name> <dob> — first-run onboarding; retries a cold restart once
@@ -171,7 +177,10 @@ add_routine() { # <title> - sets ROUTINE_TARGET to the scheduled HH:MM
   MM=$((10#${NOW##*:} + 3))
   if [ "$MM" -ge 60 ]; then MM=$((MM - 60)); HH=$(((HH + 1) % 24)); fi
   ROUTINE_TARGET=$(printf '%02d:%02d' "$HH" "$MM")
-  type_edit 1 "$ROUTINE_TARGET" 1 || { fail "routine time (routine $1)"; return 1; }
+  # no-commit typing: the keyboard stays up; ESCAPE (111) drops just the IME
+  type_edit 1 "$ROUTINE_TARGET" 1 1 || { fail "routine time (routine $1)"; return 1; }
+  timeout 30 adb shell input keyevent 111 || true
+  sleep 1.5
   if ! scroll_to_text "Save routine"; then
     timeout 30 adb shell input swipe 540 1700 540 800 500
     sleep 2

@@ -148,8 +148,14 @@ PY
     for _ in 1 2 3 4 5 6 7 8; do timeout 30 adb shell input keyevent 67; done
   fi
   timeout 30 adb shell input text "$value"
-  timeout 30 adb shell input keyevent 66
-  hide_kb
+  # nocommit mode (4th arg): leave the keyboard up and the navigation stack
+  # untouched — on modal sheets Enter+BACK can close the sheet and pop the
+  # tab stack (observed in run 15). The caller dismisses the keyboard with
+  # ESCAPE (keyevent 111) instead.
+  if [ "${4:-0}" != "1" ]; then
+    timeout 30 adb shell input keyevent 66
+    hide_kb
+  fi
   return 0
 }
 
@@ -337,8 +343,10 @@ if wait_for_text "Family" 6; then
     sleep 3
     if tap_text "Add photo" || tap_text "Replace photo"; then
       sleep 7
-      # system photo picker: the image item's content-desc is the file name
-      tap_desc "qa-photo.png" || tap_text "qa-photo.png" || true
+      # system photo picker: the item's content-desc is date-based ("Photo
+      # taken on ..."), not the file name; the first Recent cell sits at a
+      # fixed position on the pixel_5 profile
+      tap_desc "qa-photo.png" || tap_text "qa-photo.png" || timeout 30 adb shell input tap 177 1583 || true
       sleep 5
       # crop screen (allowsEditing) if it appears: try the confirm labels
       tap_text "Save" || tap_desc "Done" || tap_text "Done" || tap_text "OK" || tap_desc "Save" || true
@@ -391,8 +399,12 @@ if wait_for_text "Routines" 6; then
   TARGET=$(printf '%02d:%02d' "$HH" "$MM")
   echo "target delivery time: $TARGET"
   sleep 1
-  # the time input is the form's second EditText and ships a default value
-  type_edit 1 "$TARGET" 1 || fail "routine time entry"
+  # the time input is the form's second EditText and ships a default value;
+  # no-commit typing + ESCAPE (111) — Enter/BACK can close the sheet and pop
+  # the tab stack (run 15: form vanished to Today)
+  type_edit 1 "$TARGET" 1 1 || fail "routine time entry"
+  timeout 30 adb shell input keyevent 111 || true
+  sleep 1.5
   if ! tap_text "Save routine"; then
     # save button may sit below the sheet fold
     timeout 30 adb shell input swipe 540 1700 540 800 500
@@ -604,13 +616,19 @@ if [ "$ROUNDTRIP" = "1" ]; then
     fail "settings tab (roundtrip)"
   fi
   shot "09-restored"
-  # restored data survives force-stop + relaunch
+  # restored data survives force-stop + relaunch; the app reopens on the
+  # active baby's Today, so the restored profiles are checked on Family
   timeout 30 adb shell am force-stop $PKG
   sleep 2
   timeout 30 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
   sleep 12
-  if dump_has "QA1" || dump_has "QA2"; then
-    pass "restored data survives force-stop"
+  if wait_for_text "Family" 6; then
+    sleep 2
+    if dump_has "QA1" && dump_has "QA2"; then
+      pass "restored data survives force-stop"
+    else
+      fail "restored data survives force-stop"
+    fi
   else
     fail "restored data survives force-stop"
   fi
