@@ -81,8 +81,8 @@ ets = re.findall(r'class="android\.widget\.EditText"[^>]*bounds="\[(\d+),(\d+)\]
 if idx >= len(ets):
     print('ABSENT')
     sys.exit(0)
-b = [int(x) for x in re.findall(r'\d+', ets[idx])]
-print((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
+x1, y1, x2, y2 = (int(g) for g in ets[idx])
+print((x1 + x2) // 2, (y1 + y2) // 2)
 PY
 )
     if [ -z "$cur" ]; then cur="ABSENT"; fi
