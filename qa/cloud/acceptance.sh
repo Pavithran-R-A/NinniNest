@@ -26,8 +26,35 @@ kb_visible() {
 hide_kb() {
   if kb_visible; then
     adb shell input keyevent 4
-    sleep 1.5
+    sleep 2.5
   fi
+}
+
+# Poll until two consecutive dumps report identical EditText bounds
+# (layout settles after the keyboard reflow). Prints "x y" of the Nth
+# input, 0-based.
+stable_edit() {
+  local idx="$1" prev="" cur=""
+  for _ in 1 2 3 4 5; do
+    dump
+    cur=$(IDX="$idx" python3 - <<'PY'
+import re, sys, os
+idx = int(os.environ['IDX'])
+s = open('/tmp/acc.xml', encoding='utf-8').read()
+ets = re.findall(r'class="android\.widget\.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', s)
+if idx >= len(ets):
+    print('ABSENT')
+    sys.exit(0)
+b = [int(x) for x in re.findall(r'\d+', ets[idx])]
+print((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
+PY
+)
+    if [ "$cur" = "ABSENT" ]; then sleep 2; continue; fi
+    if [ "$cur" = "$prev" ]; then echo "$cur"; return 0; fi
+    prev="$cur"
+    sleep 2
+  done
+  echo "$cur"
 }
 
 # Tap the center of the node whose visible text matches exactly. Returns 1 if absent.
@@ -109,18 +136,8 @@ fi
 tap_text "Begin without an account"
 sleep 3
 type_edit 0 "QA1" && pass "baby name typed" || fail "baby name input"
-dump
-xy=$(python3 - <<'PY'
-import re
-s = open('/tmp/acc.xml', encoding='utf-8').read()
-ets = re.findall(r'class="android\.widget\.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', s)
-if len(ets) > 1:
-    b = [int(x) for x in re.findall(r'\d+', ets[1])]
-    print((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
-else:
-    print('NOT_FOUND')
-PY
-)
+xy=$(stable_edit 1)
+echo "dob field: $xy"
 adb shell input tap $xy
 sleep 1
 adb shell input text "2026-08-14"
@@ -155,18 +172,8 @@ if wait_for_text "Family" 6; then
   tap_text "Add another child" && pass "add another child opened" || fail "add another child"
   sleep 2
   type_edit 0 "QA2" || fail "QA2 name"
-  dump
-  xy=$(python3 - <<'PY'
-import re
-s = open('/tmp/acc.xml', encoding='utf-8').read()
-ets = re.findall(r'class="android\.widget\.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', s)
-if len(ets) > 1:
-    b = [int(x) for x in re.findall(r'\d+', ets[1])]
-    print((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
-else:
-    print('NOT_FOUND')
-PY
-)
+  xy=$(stable_edit 1)
+  echo "dob field: $xy"
   adb shell input tap $xy
   sleep 1
   adb shell input text "2026-09-10"
