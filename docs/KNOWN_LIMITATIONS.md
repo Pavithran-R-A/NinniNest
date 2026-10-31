@@ -1,68 +1,92 @@
-# Known limitations — Stage 2 checkpoint (2026-10-26)
+# Known limitations — current as of the 2026-10-31 certification pass
 
 Honest list of what this build does NOT do. Nothing here is hidden behind marketing
-language.
+language. Historical sections at the end are labelled and superseded.
 
-## Platform / environment limits (as of the 2026-10-26 recovery session)
+## Current status snapshot (2026-10-31)
 
-1. **No APK was produced yet.** The Bolt sandbox could not authenticate EAS. The
-   2026-10-26 local Gradle attempt on the owner's machine failed twice: first on
-   an SDK-mismatched `expo-image-picker` (fixed in source), then on disk
-   exhaustion — the drive had <3 GB free while Gradle wanted to download NDK
-   27.1 (~2.5 GB). All build configuration is ready and the dependency mismatch
-   is fixed; free disk space (≥6 GB recommended beyond current usage) is the
-   remaining blocker for a local build. See `docs/ANDROID_BUILD.md`.
-2. **No device or emulator run yet.** Every screen compiles and is unit-tested
-   where logic exists, but has not been *seen* rendered on Android.
-   `docs/DEVICE_TEST_MATRIX.md` lists every unverified device behaviour,
-   including the staged media restore on a real filesystem.
-3. **Git is now established.** The repository is cloned at
-   `Pavithran-R-A/NinniNest` with work on the branch
-   `release/ninninest-safety-zcode-20261026` (this limitation is closed as of
-   2026-10-26; kept here for the record).
+- Installable QA APKs are produced per push by CI (`android-qa-build`),
+  debug-signed and (since commit `bbc6c59`) debuggable for `run-as` QA
+  instrumentation — they are test artifacts, not production-signed builds.
+- Cloud-emulator acceptance (API 34, KVM hosted runner) runs the app end to
+  end; run `41197666104` completed 14/14 PASS on the exact-source APK of
+  commit `8e89683`. The corrected certification workflow (`bbc6c59`+) adds an
+  exit-status gate (FAIL>0 ⇒ red run), a self-test proving that mechanism,
+  exact-HEAD artifact resolution without fallback, strict notification-record
+  matching, a true exported-backup roundtrip via `run-as` capture, CSV bundle
+  capture, a delete-baby cascade pass, and an environment job (reboot,
+  permission denial, 320/360/393/412dp, themes, Tamil, font scale).
+- Local Gradle builds remain unused; the hosted-runner route is the release
+  build path. `docs/ANDROID_BUILD.md` documents why.
+- Milestone editing (0.9.0) and milestone/baby photo replace/remove are done;
+  item 12 of the old list is closed.
+- Routine reminders: scheduling, backgrounded tray delivery, and alarm
+  rescheduling are cloud-verified; the delivery channel is the dedicated
+  `routine-reminders` channel as of the SDK-57 trigger-`channelId` fix
+  (regression-tested; device-level delivery proof in cloud run 41197666104
+  used the expo fallback channel — the fix landed after that run).
+
+## Dependency advisories — reachability analysis (2026-10-31, npm audit)
+
+27 findings (1 critical, 11 high, 13 moderate, 2 low). **None of the
+critical/high findings is in the shipped app runtime bundle**; they sit in the
+Expo SDK 57 build/dev toolchain, traced with `npm ls`:
+
+| Package | Severity | Actual path | Runtime-reachable? |
+| --- | --- | --- | --- |
+| shell-quote | critical | react-devtools-core, @expo/cli | No — dev tooling only |
+| node-forge | high | @expo/code-signing-certificates, @expo/cli | No — build tooling |
+| ws | high | @expo/metro, metro (dev server) | No — dev tooling |
+| @xmldom/xmldom | high | @expo/plist, sf-symbols-typescript | No — build-time plist/symbol processing |
+| picomatch | high | @expo/metro-config, expo-camera→barcode-detector | No — build tooling; camera module unused |
+| decode-uri-component | high | expo-router → query-string | Borderline — the router parses URLs at runtime, but the app defines no deep-link query surface (root route reads no params); ReDoS needs attacker-controlled query input |
+| zod (transitive 3.25.76) | high | @expo/cli internal | No — build tooling; the app's direct zod is 4.6.7, NOT in the vulnerable <4.6.6 range |
+| uuid (transitive 7.0.3) | moderate | @expo/code-signing-certificates | No — build tooling |
+
+Remediation state: the available fixes for most findings require the Expo SDK
+58 major upgrade (breaking; out of scope for this release line). A non-forced
+`npm audit fix` was attempted on 2026-10-31 and **failed on toolchain disk
+exhaustion without applying any change** (package-lock.json unchanged; the
+toolchain was restored with `npm ci` and re-verified: typecheck 0, 272/272).
+No exploitable critical/high runtime finding is being suppressed; the CI
+advisory step reports these as warnings with this document as the accepted
+risk record.
 
 ## Product limits (intentional or pending)
 
-4. **Photos: web has no durable copy.** The picker is wired on native with
-   managed-storage copies; on web the picker is not offered (photo controls
-   hide behind the same demo flag) and photo durability remains a documented
-   platform limitation. Backup imports on web are records-only (the no-op
-   media port), stated in the result message.
 5. **No growth percentiles.** No validated, licensed WHO dataset is bundled; the app
    shows descriptive trends only, never invented medical interpretation.
 6. **Routine reminders never create records.** Notifications are informational only —
-   they cannot write medication administrations or journal entries. Reminder
-   delivery after reboot is asserted by the RECEIVE_BOOT_COMPLETED manifest
-   entry but NOT TESTED on a device.
+   they cannot write medication administrations or journal entries.
 7. **No medication dose calculation.** The app records what was given; it never
    suggests or computes doses.
 8. **Notifications are Android/iOS only.** Web cannot schedule them (platform
    limitation, surfaced in the UI).
-9. **Large photo libraries: envelope measured, untested on-device.** 100 ×
-   192 KB photos produce a ~25 MB backup JSON (linear scaling, measured);
-   on-device export/import behaviour at that size is untested.
+9. **Large photo libraries: envelope measured.** 100 × 192 KB photos produce a
+   ~25 MB backup JSON (linear, measured); on-device export/import at that size
+   is untested.
 10. **No cloud sync, no accounts, no payments** — by design, per project rules.
-11. **Real-adapter SQLite not executed.** IndexedDB runs against a real
-    spec-compliant store in tests; `expo-sqlite` exclusive transactions and
-    the atomic timer completion still need a device run.
-12. **Milestone photos cannot be edited or removed after creation.** The
-    create flow attaches a photo; there is no milestone edit sheet yet, so
-    replace/remove for an existing milestone photo (and the baby-photo change
-    flows) need the milestone-edit slice. Baby photos support full
-    replace/remove via profile edit.
+11. **Physical-hardware pass remains NOT TESTED.** No explicitly authorized
+    physical test device was provided; the release-candidate verdict treats
+    emulator/cloud evidence as emulator evidence, never as hardware proof.
+12. **Web photo durability**: web picker flows remain limited vs native
+    (records-only photo behavior documented in the result messages).
 13. **Form-level strings outside Family photo flows remain English-only**
     (Growth/Medication/Vaccination/Routine forms and Settings dialogs use
     hardcoded English); the en/ta packs cover navigation, Today, Journal,
     Handoff, Insights labels and the new photo/import messages, with runtime
     English fallback documented. Completing the sweep is backlog.
-14. **APK**: not produced this session — the build configuration is correct
-    and ~2 GB of dependencies are cached; ≥6 GB free disk is the sole blocker
-    (see docs/ANDROID_BUILD.md). No device QA has therefore run.
 
-## Unresolved before calling it "release-ready"
+## Unresolved before store submission (owner-level)
 
-- Owner: free disk space, then run the local Gradle build (or EAS) — until then
-  there is no installable artifact.
-- Full device test matrix must be executed and honestly ticked (staged media
-  restore on real filesystem included).
-- One visual pass on a real screen (safe areas, 360dp width, night mode).
+- Production signing keystore + Play Console declarations (owner actions).
+- Physical-device pass on an explicitly authorized device.
+- Expo SDK 58 upgrade line for the toolchain advisories above.
+
+## Historical checkpoint (2026-10-26) — SUPERSEDED, kept for the record
+
+1. "No APK was produced yet" — true then; CI APKs exist since run 40385288846.
+2. "No device or emulator run yet" — true then; extensive device and cloud
+   verification has since run (see `docs/DEVICE_TEST_MATRIX.md`).
+3. Git branch establishment — closed long since.
+14. (old numbering) "APK: not produced this session" — superseded as above.
