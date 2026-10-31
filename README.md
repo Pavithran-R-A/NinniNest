@@ -66,9 +66,13 @@ routing — see `docs/DEVICE_TEST_MATRIX.md` for the row-by-row VERIFIED/NOT TES
 and `RELEASE_EVIDENCE.md` for provenance. Remaining device rows (notification delivery,
 reboot recovery, physical-hardware pass) are tracked in `docs/KNOWN_LIMITATIONS.md`.
 
-CI runs strict typecheck, the full Vitest suite (266 tests), the web export, and a
+CI runs strict typecheck, the full Vitest suite (272 tests), the web export, and a
 dependency-advisory report on every push. `docs/ANDROID_BUILD.md` documents how the
-NDK/toolchain is pinned via the versioned `plugins/withNdkVersion` config plugin.
+NDK/toolchain is pinned via the versioned `plugins/withNdkVersion` config plugin, and
+a dispatch-only cloud-emulator acceptance workflow (exit-status gate + self-test,
+exact-HEAD APK provenance, notification-channel assertion, true exported-backup
+roundtrip, reboot/denial/width/theme/Tamil environment matrix) certifies each release
+candidate against the exact source SHA.
 
 ## Free-forever promise
 
