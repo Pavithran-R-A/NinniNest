@@ -1,0 +1,77 @@
+name: android-acceptance
+
+# Manual-dispatch cloud-emulator acceptance for the exact release-branch HEAD.
+# Reuses the existing exact-source QA APK artifact (no Android rebuild).
+# Synthetic data only; artifacts are short-retention and contain no personal data.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  emulator-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact release-branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: release/ninninest-safety-zcode-20261026
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Enable KVM (documented hosted-runner method)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls /dev/kvm
+
+      - name: Reuse exact-source QA APK artifact (no rebuild)
+        uses: actions/download-artifact@v4
+        with:
+          name: ninninest-qa-apk-33f1c3a70f2bf7230644d776bf90183d67cd9e6d
+          path: apk
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 41092946811
+
+      - name: Verify APK provenance
+        run: |
+          ls -la apk/
+          sha256sum apk/app-release.apk | tee qa-cloud-apk-sha.txt
+
+      - name: Run cloud-emulator acceptance (synthetic data)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install -r apk/app-release.apk
+            bash qa/cloud/acceptance.sh
+
+      - name: Upload acceptance evidence (synthetic only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-acceptance-evidence
+          path: |
+            qa-cloud/
+            qa-cloud-apk-sha.txt
+          retention-days: 7
+          if-no-files-found: error
