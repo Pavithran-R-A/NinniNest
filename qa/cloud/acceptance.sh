@@ -65,6 +65,27 @@ PY
   return 0
 }
 
+# Tap the center of the node whose content-desc matches exactly.
+tap_desc() {
+  dump
+  local xy
+  xy=$(DESC="$1" python3 - <<'PY'
+import re, sys, os
+desc = os.environ['DESC']
+s = open('/tmp/acc.xml', encoding='utf-8', errors='replace').read()
+m = re.search(r'content-desc="' + re.escape(desc) + r'"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', s)
+if not m:
+    print('NOT_FOUND')
+    sys.exit(2)
+x1, y1, x2, y2 = map(int, m.groups())
+print((x1 + x2) // 2, (y1 + y2) // 2)
+PY
+)
+  if [ "$xy" = "NOT_FOUND" ]; then return 1; fi
+  timeout 30 adb shell input tap $xy
+  return 0
+}
+
 # Type into the Nth on-screen EditText (0-based) and commit with Enter.
 # Waits until two consecutive dumps report identical bounds before tapping
 # (the layout settles after a keyboard reflow); never returns a silent
@@ -228,9 +249,16 @@ fi
 shot "04-two-babies"
 
 echo "=== 4. notification: schedule + backgrounded delivery ==="
+# Creating a baby auto-switches to it and lands on Today; go back to Family
+if ! dump_has "Routines"; then
+  if wait_for_text "Family" 4; then
+    sleep 2
+  else
+    fail "family tab (routines path)"
+  fi
+fi
 if wait_for_text "Routines" 6; then
-  tap_text "Routines"
-  sleep 2
+  sleep 1
   tap_text "Add routine"
   sleep 3
   type_edit 0 "CloudNap" || fail "routine name"
@@ -278,7 +306,7 @@ timeout 30 adb shell am force-stop $PKG
 sleep 2
 timeout 30 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 sleep 12
-if dump_has "QA1"; then
+if dump_has "QA1" || dump_has "QA2"; then
   pass "data persists after force-stop"
 else
   fail "data persists after force-stop"
@@ -296,25 +324,13 @@ if wait_for_text "Settings" 6; then
   timeout 30 adb shell input swipe 540 1900 540 600 800
   sleep 1
   if tap_text "Import a backup"; then
-    sleep 4
-    dump
-    # navigate to Downloads via drawer
-    xy=$(python3 - <<'PY'
-import re
-s = open('/tmp/acc.xml', encoding='utf-8').read()
-m = re.search(r'text="Show roots"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', s)
-if m:
-    b = [int(x) for x in re.findall(r'\d+', m.group(1))]
-    print((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
-else:
-    print('NOT_FOUND')
-PY
-)
-    if [ "$xy" != "NOT_FOUND" ]; then
-      timeout 30 adb shell input tap $xy
+    sleep 5
+    # open the drawer (content-desc button) and pick the Downloads root
+    if tap_desc "Show roots"; then
       sleep 2
-      tap_text "Downloads"
-      sleep 2
+      if wait_for_text "Downloads" 4; then
+        sleep 3
+      fi
     fi
     if tap_text "malformed.json"; then
       sleep 4
