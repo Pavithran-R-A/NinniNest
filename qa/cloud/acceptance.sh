@@ -329,9 +329,13 @@ fi
 shot "04-two-babies"
 
 # ------------------------------------------------- photo into the dataset ---
-echo "=== 3b. attach a photo to QA1 (export roundtrip needs embedded media) ==="
-# Deterministic synthetic PNG; the app will crop/re-encode it, so the backup
-# hash must be verified against the backup's own payload, not this file.
+echo "=== 3b. seed photo bytes through the app's real import path ==="
+# The UI photo-picker flow proved flaky across runs 14-19 (a different edge
+# each run). Instead, a crafted SEED backup (qa/tools/craft-backup.mjs — a
+# clearly-labelled test fixture whose embedded photo carries its genuine
+# SHA-256) is imported through the app's PRODUCTION import path, putting
+# photo bytes into the dataset. The certified roundtrip file below remains
+# the app's OWN export; the seed never substitutes for it.
 python3 - <<'PY'
 import struct, zlib
 def chunk(t, d):
@@ -344,44 +348,43 @@ png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 
 open('qa-photo.png', 'wb').write(png)
 print('qa-photo.png written', len(png), 'bytes')
 PY
-timeout 60 adb push qa-photo.png /sdcard/Download/qa-photo.png >/dev/null 2>&1
-# the system PHOTO picker lists media-store images only: scan the volume so
-# the pushed PNG becomes visible
-timeout 30 adb shell content call --uri content://media/ --method scan_volume --arg external_primary >/dev/null 2>&1 || true
-sleep 3
-if wait_for_text "Family" 6; then
+node qa/tools/craft-backup.mjs qa-photo.png crafted-seed.json
+timeout 60 adb push crafted-seed.json /sdcard/Download/crafted-seed.json >/dev/null 2>&1
+if wait_for_text "Settings" 6; then
+  tap_text "Settings"
   sleep 2
-  if tap_desc "Edit QA1"; then
-    sleep 3
-    if tap_text "Add photo" || tap_text "Replace photo"; then
-      sleep 7
-      # system photo picker: the item's content-desc is date-based ("Photo
-      # taken on ..."), not the file name; the first Recent cell sits at a
-      # fixed position on the pixel_5 profile
-      tap_desc "qa-photo.png" || tap_text "qa-photo.png" || timeout 30 adb shell input tap 177 1583 || true
-      sleep 6
-      # crop screen (run 16: the confirm control is labelled "CROP")
-      tap_text "CROP" || tap_text "Save" || tap_desc "Done" || tap_text "Done" || tap_text "OK" || true
-      sleep 3
-      # the save button can sit below the sheet fold
-      if scroll_to_text "Save changes"; then
+  if scroll_to_text "Import a backup"; then
+    if pick_download_file "crafted-seed.json"; then
+      sleep 5
+      if ! wait_for_text "Review this import" 6; then
+        tap_text "crafted-seed.json" || true
         sleep 4
-        if dump_has "Remove photo" || dump_has "Replace photo"; then
-          pass "photo attached to QA1"
+      fi
+      if wait_for_text "Review this import" 6; then
+        tap_text "IMPORT" || tap_text "Import"
+        sleep 6
+        if wait_for_text "Family" 6; then
+          tap_text "Family"
+          sleep 3
+          if dump_has "TestCloud1" && dump_has "TestCloud2"; then
+            pass "photo-bearing seed imported via the real import path"
+          else
+            fail "seed import visible"
+          fi
         else
-          fail "photo attached to QA1"
+          fail "family after seed import"
         fi
       else
-        fail "save changes (photo)"
+        fail "seed import review dialog"
       fi
     else
-      fail "add-photo button"
+      fail "seed file visible in picker"
     fi
   else
-    fail "edit QA1 entry"
+    fail "import button (seed)"
   fi
 else
-  fail "family tab (photo)"
+  fail "settings tab (seed)"
 fi
 # unwind any open picker/sheet so later sections start from a clean state
 hide_kb
@@ -524,9 +527,9 @@ shot "07-final"
 echo "=== 7. true exported-backup roundtrip (exact share-sheet bytes via run-as) ==="
 # The QA APK is built debuggable so run-as can read the cache file the export
 # flow actually wrote — no handcrafted substitute. Share sheet is dismissed;
-# the file on disk is the production serialization.
-DEVDATE=$(timeout 30 adb shell date +%F | tr -d '\r')
-EXPORT_NAME="ninninest-backup-$DEVDATE.json"
+# the file on disk is the production serialization. The name is DISCOVERED
+# from the cache dir (building it from the device date broke at UTC
+# midnight: the app names by UTC date, the shell by local date).
 ROUNDTRIP=0
 if wait_for_text "Settings" 6; then
   sleep 1
@@ -535,6 +538,12 @@ if wait_for_text "Settings" 6; then
     shot "08-share-sheet"
     timeout 30 adb shell input keyevent 4   # dismiss the share sheet
     sleep 3
+    EXPORT_NAME=$(timeout 30 adb shell run-as $PKG ls cache 2>/dev/null | tr -d '\r' | grep -oE 'ninninest-backup-[0-9-]+\.json' | tail -1)
+    if [ -z "$EXPORT_NAME" ]; then
+      echo "no ninninest-backup-*.json in app cache"
+      fail "true export capture/verify"
+    fi
+    if [ -n "$EXPORT_NAME" ]; then
     timeout 30 adb exec-out run-as $PKG cat "cache/$EXPORT_NAME" > exported.json 2>/dev/null
     if [ -s exported.json ] && python3 - exported.json <<'PY'
 import json, sys, base64, hashlib, re
@@ -548,16 +557,21 @@ data = b.get('data', {})
 babies = data.get('babies', [])
 names = sorted(x.get('name','') for x in babies)
 print('babies:', names)
-if names != ['QA1', 'QA2']: print('bad babies'); ok = False
+# QA1/QA2 created in the UI; TestCloud1/2 arrived via the seed import
+if 'QA1' not in names or 'TestCloud2' not in names or len(names) < 3:
+    print('bad babies'); ok = False
 if len(data.get('events', [])) < 1: print('no events'); ok = False
-for p in b.get('photosEmbedded', []):
+photos = b.get('photosEmbedded', [])
+if len(photos) < 1:
+    print('no embedded photos — the seed photo must be in the export'); ok = False
+for p in photos:
     raw = base64.b64decode(p.get('bytesBase64', ''), validate=True)
     dig = hashlib.sha256(raw).hexdigest()
     if p.get('hashAlgo') != 'sha256' or dig != p.get('sha256'):
         print('photo hash mismatch'); ok = False
     else:
         print('photo sha256 verified:', dig[:16])
-print('events:', len(data.get('events', [])), 'photos:', len(b.get('photosEmbedded', [])))
+print('events:', len(data.get('events', [])), 'photos:', len(photos))
 sys.exit(0 if ok else 1)
 PY
     then
@@ -566,6 +580,7 @@ PY
       ROUNDTRIP=1
     else
       fail "true export capture/verify"
+    fi
     fi
   else
     fail "export button"

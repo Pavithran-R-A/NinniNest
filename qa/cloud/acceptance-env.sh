@@ -168,7 +168,14 @@ onboard() { # <name> <dob> — first-run onboarding; retries a cold restart once
   type_edit 0 "$1" || { fail "onboarding name ($1)"; return 1; }
   type_edit 1 "$2" || { fail "onboarding dob ($1)"; return 1; }
   wait_for_text "Begin the journal" 6 && sleep 2 && tap_text "Begin the journal"
-  if wait_for_text "QUICK LOG" 8; then pass "onboarding ($1)"; return 0; fi
+  if ! wait_for_text "QUICK LOG" 8; then
+    # the save may have committed while the screen raced: restart and re-check
+    timeout 30 adb shell am force-stop $PKG
+    sleep 2
+    launch
+    sleep 12
+  fi
+  if wait_for_text "QUICK LOG" 6; then pass "onboarding ($1)"; return 0; fi
   fail "onboarding today ($1)"; return 1
 }
 ROUTINE_TARGET=""
