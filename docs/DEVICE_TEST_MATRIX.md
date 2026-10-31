@@ -28,7 +28,8 @@ SHA-256-verified locally against its exact-SHA CI run before install.
 | Tampered photo byte → rejection dialog, nothing written | VERIFIED | b39 + ui9 |
 | Multi-baby isolation after restore | VERIFIED | b31/b33 |
 | Routine alarm SCHEDULED (RTC_WAKEUP) | VERIFIED | dumpsys alarm (d-series) |
-| Notification DELIVERED to tray, app backgrounded | NOT TESTED on device; foreground occurrence suppressed (documented expo behavior); cloud run 5 section 4 targets this |
+| Notification DELIVERED to tray, app backgrounded | VERIFIED (cloud API 34) | run 41197666104: routine → RTC_WAKEUP alarm → app backgrounded → `NotificationRecord pkg=app.ninninest.journal` in dumpsys tray; foreground occurrence suppressed (documented expo behavior) |
+| Malformed-JSON import rejection via real picker | VERIFIED (cloud API 34) | run 41197666104: Downloads → malformed.json → "This backup cannot be imported" dialog, records untouched |
 | Notification permission denial path | NOT TESTED (grant path verified android-02) |
 | Alarm re-fires after reboot | NOT TESTED (data persistence across reboot verified c01) |
 | Import replace-all (erase) semantics | NOT TESTED on device (merge proven; replace unit-tested) |
