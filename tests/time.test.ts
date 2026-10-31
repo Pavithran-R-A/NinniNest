@@ -40,7 +40,11 @@ describe('babyAge', () => {
     expect(babyAge(localDateKey(d))).toBe('3 weeks old');
   });
   it('counts months', () => {
+    // Anchor to the first of the month: subtracting months from the 29th-31st
+    // rolls over (Oct 31 - 4 months normalizes to Jul 1 on JS Date) and broke
+    // this test on the last days of long months (found on CI, Oct 31).
     const d = new Date();
+    d.setDate(1);
     d.setMonth(d.getMonth() - 4);
     expect(babyAge(localDateKey(d))).toBe('4 months old');
   });
