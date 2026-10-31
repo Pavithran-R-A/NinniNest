@@ -2,12 +2,36 @@
 # Cloud-emulator acceptance for NinniNest (synthetic data only).
 # Runs on a GitHub-hosted ubuntu runner inside reactivecircus/android-emulator-runner.
 # Technique: uiautomator dump -> locate text bounds -> tap center. No blind coordinates.
+#
+# Integrity contract (certification requirement):
+#   - The script exits NONZERO when any assertion fails. A green workflow run
+#     is only possible when every assertion passed.
+#   - Missing critical evidence files fail the run.
+#   - SELFTEST=1 injects a deliberate failure and exits 1; the workflow runs
+#     it first and requires that exact exit code, proving the gate wiring.
 set -u
 OUT=qa-cloud
 mkdir -p "$OUT/dumps"
 PASS=0
 FAIL=0
 PKG=app.ninninest.journal
+
+# ---------------------------------------------------------------- selftest ---
+# Proves the failure mechanism: run with SELFTEST=1; the workflow requires
+# exit code 1 from it. If the gate ever stops working, the workflow goes red.
+if [ "${SELFTEST:-0}" = "1" ]; then
+  fail() { FAIL=$((FAIL + 1)); echo "FAIL: $1"; }
+  pass() { PASS=$((PASS + 1)); echo "PASS: $1"; }
+  pass "selftest healthy"
+  fail "selftest-deliberate-failure"
+  echo "=== SUMMARY: PASS=$PASS FAIL=$FAIL ==="
+  if [ "$FAIL" -gt 0 ]; then
+    echo "SELFTEST OK: failing assertions produce exit 1"
+    exit 1
+  fi
+  echo "SELFTEST BROKEN: a failing assertion did not affect the exit status"
+  exit 1
+fi
 
 shot() { timeout 60 adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null || true; }
 pass() { PASS=$((PASS + 1)); echo "PASS: $1"; }
@@ -167,6 +191,40 @@ sys.exit(0 if needle in s else 1)
 PY
 }
 
+# Open the system document picker at the Downloads root and tap a file name.
+pick_download_file() { # <file name>
+  sleep 5
+  if tap_desc "Show roots"; then
+    sleep 4
+    if ! wait_for_text "Downloads" 6; then
+      tap_desc "Show roots" || true
+      sleep 3
+      wait_for_text "Downloads" 4 || true
+    fi
+    sleep 3
+  fi
+  tap_text "$1" && return 0
+  # one recovery sweep: re-open the drawer and retry
+  tap_desc "Show roots" || true
+  sleep 3
+  wait_for_text "Downloads" 4 || true
+  sleep 2
+  tap_text "$1"
+}
+
+# Find a control that may sit above or below the current viewport:
+# scroll to the top, then nudge down, tapping at each position.
+scroll_to_text() { # <text>
+  if tap_text "$1"; then return 0; fi
+  timeout 30 adb shell input swipe 540 600 540 1900 600
+  sleep 1.5
+  if tap_text "$1"; then return 0; fi
+  timeout 30 adb shell input swipe 540 1500 540 900 600
+  sleep 1.5
+  tap_text "$1"
+}
+
+# ------------------------------------------------------------------ launch ---
 echo "=== 1. cold launch + permission + onboarding ==="
 # Cloud-runner ANRs: the Pixel Launcher ANRs chronically under 2-core KVM
 # contention (dumps in run 7 show its dialog stealing the active window
@@ -218,6 +276,7 @@ else
   fail "begin-the-journal button"; shot "02"; exit 1
 fi
 
+# ------------------------------------------------------------- quick logs ---
 echo "=== 2. quick-log diaper ==="
 if wait_for_text "Diaper" 8; then
   tap_text "Diaper"
@@ -248,6 +307,64 @@ else
 fi
 shot "04-two-babies"
 
+# ------------------------------------------------- photo into the dataset ---
+echo "=== 3b. attach a photo to QA1 (export roundtrip needs embedded media) ==="
+# Deterministic synthetic PNG; the app will crop/re-encode it, so the backup
+# hash must be verified against the backup's own payload, not this file.
+python3 - <<'PY'
+import struct, zlib
+def chunk(t, d):
+    return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+w = h = 6
+raw = b''
+for y in range(h):
+    raw += b'\x00' + bytes([255, 180, 120] * w)
+png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+open('qa-photo.png', 'wb').write(png)
+print('qa-photo.png written', len(png), 'bytes')
+PY
+timeout 60 adb push qa-photo.png /sdcard/Download/qa-photo.png >/dev/null 2>&1
+if wait_for_text "Family" 6; then
+  sleep 2
+  if tap_desc "Edit QA1"; then
+    sleep 3
+    if tap_text "Add photo" || tap_text "Replace photo"; then
+      sleep 6
+      # picker -> Downloads -> file -> crop confirm
+      if pick_download_file "qa-photo.png"; then
+        sleep 5
+        # crop screen: try the known confirm labels
+        if ! tap_text "Save"; then
+          if ! tap_desc "Done"; then
+            tap_text "Done" || tap_text "OK" || tap_desc "Save" || true
+          fi
+        fi
+        sleep 3
+        if tap_text "Save changes"; then
+          sleep 4
+          if dump_has "Remove photo" || dump_has "Replace photo"; then
+            pass "photo attached to QA1"
+            PHOTO=1
+          else
+            fail "photo attached to QA1"
+          fi
+        else
+          fail "save changes (photo)"
+        fi
+      else
+        fail "photo picked from Downloads"
+      fi
+    else
+      fail "add-photo button"
+    fi
+  else
+    fail "edit QA1 entry"
+  fi
+else
+  fail "family tab (photo)"
+fi
+
+# ------------------------------------------------------------ notifications ---
 echo "=== 4. notification: schedule + backgrounded delivery ==="
 # Creating a baby auto-switches to it and lands on Today; go back to Family
 if ! dump_has "Routines"; then
@@ -282,7 +399,7 @@ if wait_for_text "Routines" 6; then
   if dump_has "$TARGET" || dump_has "CloudNap"; then
     SAVED=1
   else
-    # notification scheduling may restart the app (crash buffer captures it);
+    # scheduling issues can restart the app (crash buffer captures it);
     # re-navigate to the list and check again
     if wait_for_text "Family" 4; then sleep 2; fi
     if wait_for_text "Routines" 4; then sleep 2; fi
@@ -294,8 +411,6 @@ if wait_for_text "Routines" 6; then
   fi
   if [ "$SAVED" = "1" ]; then
     pass "routine saved and listed"
-  fi
-  if [ "$SAVED" = "1" ]; then
     timeout 30 adb shell dumpsys alarm 2>/dev/null | grep -qE "RTC_WAKEUP.*$TARGET"
     if [ $? -eq 0 ]; then pass "alarm scheduled for $TARGET"; else fail "alarm scheduled for $TARGET"; fi
     timeout 30 adb shell input keyevent 3
@@ -306,10 +421,18 @@ if wait_for_text "Routines" 6; then
     if [ "$WAIT" -gt 4 ]; then WAIT=4; fi        # target was now+2min; never wait longer
     sleep $((WAIT * 60 + 45))
     timeout 30 adb shell dumpsys notification --noredact > "$OUT/notification-dump.txt" 2>/dev/null
-    if grep -q "routine-reminders" "$OUT/notification-dump.txt" && grep -qE "NotificationRecord\(.*$PKG" "$OUT/notification-dump.txt"; then
-      pass "notification delivered to tray while backgrounded"
+    # Strict record match: ONE NotificationRecord line that names our package,
+    # the dedicated routine-reminders channel (SDK-57 trigger channelId), and
+    # the app's routine-<uuid>-<day> tag — never a channel name and an
+    # unrelated notification anywhere in the same dump.
+    grep -E "NotificationRecord\(.*pkg=$PKG " "$OUT/notification-dump.txt" \
+      | grep "channel=routine-reminders" \
+      | grep -E "tag=routine-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[0-9]" \
+      > "$OUT/notification-record.txt" 2>/dev/null || true
+    if [ -s "$OUT/notification-record.txt" ]; then
+      pass "notification delivered to tray while backgrounded (routine-reminders channel)"
     else
-      fail "notification delivered to tray while backgrounded"
+      fail "notification delivered on routine-reminders channel"
     fi
   fi
   shot "05-notification"
@@ -317,6 +440,7 @@ else
   fail "routines tab"
 fi
 
+# ------------------------------------------------------------ persistence ---
 echo "=== 5. force-stop + relaunch persistence ==="
 timeout 30 adb shell am force-stop $PKG
 sleep 2
@@ -329,6 +453,7 @@ else
 fi
 shot "06-relaunch"
 
+# ------------------------------------------------------- malformed import ---
 echo "=== 6. malformed-JSON import rejection ==="
 cat > malformed.json <<'JSON'
 {"app":"NinniNest","backupVersion":5,"data":{"babies":[{"id":"X
@@ -337,26 +462,11 @@ timeout 60 adb push malformed.json /sdcard/Download/malformed.json >/dev/null 2>
 if wait_for_text "Settings" 6; then
   tap_text "Settings"
   sleep 2
-  timeout 30 adb shell input swipe 540 1900 540 600 800
-  sleep 1
-  if tap_text "Import a backup"; then
-    sleep 5
-    # open the drawer (content-desc button) and pick the Downloads root
-    if tap_desc "Show roots"; then
-      sleep 4
-      if ! wait_for_text "Downloads" 6; then
-        tap_desc "Show roots" || true
-        sleep 3
-        wait_for_text "Downloads" 4 || true
-      fi
-      sleep 3
-    fi
-    TAPPED=0
-    if tap_text "malformed.json"; then
+  if scroll_to_text "Import a backup"; then
+    if pick_download_file "malformed.json"; then
       TAPPED=1
-    elif { tap_desc "Show roots" || true; } && sleep 3 && wait_for_text "Downloads" 4; then
-      sleep 2
-      tap_text "malformed.json" && TAPPED=1 || true
+    else
+      TAPPED=0
     fi
     if [ "$TAPPED" = "1" ]; then
       sleep 4
@@ -377,7 +487,335 @@ else
 fi
 shot "07-final"
 
+# ------------------------------------------- TRUE export -> restore cycle ---
+echo "=== 7. true exported-backup roundtrip (exact share-sheet bytes via run-as) ==="
+# The QA APK is built debuggable so run-as can read the cache file the export
+# flow actually wrote — no handcrafted substitute. Share sheet is dismissed;
+# the file on disk is the production serialization.
+DEVDATE=$(timeout 30 adb shell date +%F | tr -d '\r')
+EXPORT_NAME="ninninest-backup-$DEVDATE.json"
+ROUNDTRIP=0
+if wait_for_text "Settings" 6; then
+  sleep 1
+  if scroll_to_text "Export backup (JSON)"; then
+    sleep 6
+    shot "08-share-sheet"
+    timeout 30 adb shell input keyevent 4   # dismiss the share sheet
+    sleep 3
+    timeout 30 adb exec-out run-as $PKG cat "cache/$EXPORT_NAME" > exported.json 2>/dev/null
+    if [ -s exported.json ] && python3 - exported.json <<'PY'
+import json, sys, base64, hashlib, re
+try:
+    b = json.load(open(sys.argv[1], encoding='utf-8'))
+except Exception as e:
+    print('PARSE-FAIL', e); sys.exit(1)
+ok = True
+if b.get('backupVersion') != 5: print('bad version', b.get('backupVersion')); ok = False
+data = b.get('data', {})
+babies = data.get('babies', [])
+names = sorted(x.get('name','') for x in babies)
+print('babies:', names)
+if names != ['QA1', 'QA2']: print('bad babies'); ok = False
+if len(data.get('events', [])) < 1: print('no events'); ok = False
+for p in b.get('photosEmbedded', []):
+    raw = base64.b64decode(p.get('bytesBase64', ''), validate=True)
+    dig = hashlib.sha256(raw).hexdigest()
+    if p.get('hashAlgo') != 'sha256' or dig != p.get('sha256'):
+        print('photo hash mismatch'); ok = False
+    else:
+        print('photo sha256 verified:', dig[:16])
+print('events:', len(data.get('events', [])), 'photos:', len(b.get('photosEmbedded', [])))
+sys.exit(0 if ok else 1)
+PY
+    then
+      sha256sum exported.json | tee "$OUT/exported-sha.txt"
+      pass "true export captured and structurally verified"
+      ROUNDTRIP=1
+    else
+      fail "true export capture/verify"
+    fi
+  else
+    fail "export button"
+  fi
+else
+  fail "settings tab (export)"
+fi
+
+if [ "$ROUNDTRIP" = "1" ]; then
+  echo "--- 7b. fresh install: import the exact bytes ---"
+  timeout 30 adb shell pm clear $PKG >/dev/null 2>&1
+  timeout 30 adb shell settings put secure hide_error_dialogs 1
+  timeout 60 adb push exported.json /sdcard/Download/$EXPORT_NAME >/dev/null 2>&1
+  timeout 30 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+  sleep 12
+  tap_text "Allow" || echo "no permission dialog after clear (ok)"
+  if wait_for_text "Begin without an account" 8; then
+    sleep 3
+    type_edit 0 "QA3" || fail "QA3 name"
+    type_edit 1 "2026-10-01" || fail "QA3 dob"
+    wait_for_text "Begin the journal" 6 && sleep 2 && tap_text "Begin the journal"
+    wait_for_text "QUICK LOG" 8 || fail "QA3 profile created"
+  else
+    fail "fresh-install onboarding"
+  fi
+  if wait_for_text "Settings" 6; then
+    tap_text "Settings"
+    sleep 2
+    if scroll_to_text "Import a backup"; then
+      if pick_download_file "$EXPORT_NAME"; then
+        sleep 4
+        if wait_for_text "Review this import" 6; then
+          pass "import review dialog shows the real file"
+          tap_text "Import"
+          sleep 6
+          if wait_for_text "Family" 6; then
+            tap_text "Family"
+            sleep 3
+            if dump_has "QA1" && dump_has "QA2"; then
+              pass "exact exported bytes restored on fresh install"
+              # merge semantics: the file's records are ADDED, the pre-import
+              # profile survives
+              if dump_has "QA3"; then
+                pass "merge kept pre-import profile"
+              else
+                fail "merge kept pre-import profile"
+              fi
+            else
+              fail "restored records visible"
+            fi
+          else
+            fail "family after import"
+          fi
+        else
+          fail "import review dialog"
+        fi
+      else
+        fail "exported file visible in picker"
+      fi
+    else
+      fail "import button (roundtrip)"
+    fi
+  else
+    fail "settings tab (roundtrip)"
+  fi
+  shot "09-restored"
+  # restored data survives force-stop + relaunch
+  timeout 30 adb shell am force-stop $PKG
+  sleep 2
+  timeout 30 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+  sleep 12
+  if dump_has "QA1" || dump_has "QA2"; then
+    pass "restored data survives force-stop"
+  else
+    fail "restored data survives force-stop"
+  fi
+
+  echo "--- 7c. replace-all semantics ---"
+  if wait_for_text "Settings" 6; then
+    tap_text "Settings"
+    sleep 2
+    scroll_to_text "Replace all" || fail "replace-all mode toggle"
+    if scroll_to_text "Import a backup"; then
+      if pick_download_file "$EXPORT_NAME"; then
+        sleep 4
+        if wait_for_text "Review this import" 6; then
+          tap_text "Import"
+          sleep 6
+          if wait_for_text "Family" 6; then
+            tap_text "Family"
+            sleep 3
+            if dump_has "QA1" && dump_has "QA2" && ! dump_has "QA3"; then
+              pass "replace-all erased pre-import profile and restored the file's records"
+            else
+              fail "replace-all semantics"
+            fi
+          else
+            fail "family after replace"
+          fi
+        else
+          fail "replace review dialog"
+        fi
+      else
+        fail "exported file visible in picker (replace)"
+      fi
+    else
+      fail "import button (replace)"
+    fi
+  else
+    fail "settings tab (replace)"
+  fi
+
+  echo "--- 7d. failed-import preservation (tampered photo byte) ---"
+  python3 - exported.json tampered.json <<'PY'
+import json, sys
+b = json.load(open(sys.argv[1], encoding='utf-8'))
+ph = b.get('photosEmbedded', [])
+if ph:
+    bb = ph[0]['bytesBase64']
+    mid = len(bb) // 2
+    flip = 'A' if bb[mid] != 'A' else 'B'
+    ph[0]['bytesBase64'] = bb[:mid] + flip + bb[mid+1:]
+else:
+    # no photos in this dataset: corrupt the first event row instead
+    ev = b['data']['events'][0]
+    ev['id'] = 'zz' + ev['id'][2:]
+json.dump(b, open(sys.argv[2], 'w', encoding='utf-8'))
+print('tampered file written')
+PY
+  # restore merge mode before the negative test
+  if wait_for_text "Settings" 4; then
+    tap_text "Settings"
+    sleep 2
+    scroll_to_text "Merge" || true
+    timeout 60 adb push tampered.json /sdcard/Download/tampered.json >/dev/null 2>&1
+    if scroll_to_text "Import a backup"; then
+      if pick_download_file "tampered.json"; then
+        sleep 4
+        if wait_for_text "This backup cannot be imported" 6; then
+          pass "tampered backup rejected"
+          tap_text "OK" || timeout 30 adb shell input keyevent 4
+        else
+          fail "tampered backup rejection"
+        fi
+        sleep 2
+        if wait_for_text "Family" 6; then
+          tap_text "Family"
+          sleep 3
+          if dump_has "QA1" && dump_has "QA2"; then
+            pass "records preserved after failed import"
+          else
+            fail "records preserved after failed import"
+          fi
+        else
+          fail "family after failed import"
+        fi
+      else
+        fail "tampered file visible in picker"
+      fi
+    else
+      fail "import button (tamper)"
+    fi
+  else
+    fail "settings tab (tamper)"
+  fi
+fi
+
+# ----------------------------------------------------------- CSV/ZIP real ---
+echo "=== 8. CSV/ZIP export capture and content verification ==="
+if wait_for_text "Settings" 6; then
+  tap_text "Settings"
+  sleep 2
+  if scroll_to_text "Export care history (CSV)"; then
+    sleep 6
+    timeout 30 adb shell input keyevent 4   # dismiss the share sheet
+    sleep 3
+    ZIPNAME=$(timeout 30 adb shell run-as $PKG ls cache 2>/dev/null | tr -d '\r' | grep -oE 'ninninest-csv-[0-9]+\.zip' | tail -1)
+    if [ -n "$ZIPNAME" ]; then
+      timeout 30 adb exec-out run-as $PKG cat "cache/$ZIPNAME" > "$OUT/$ZIPNAME" 2>/dev/null
+      if [ -s "$OUT/$ZIPNAME" ] && python3 - "$OUT/$ZIPNAME" <<'PY'
+import sys, zipfile, io
+z = zipfile.ZipFile(sys.argv[1])
+names = z.namelist()
+print('zip entries:', names)
+assert 'care-history.csv' in names, 'care-history.csv missing'
+rows = z.read('care-history.csv').decode('utf-8', 'replace')
+assert 'diaper' in rows.lower(), 'no diaper row in care-history.csv'
+print('care-history.csv rows:', len(rows.strip().splitlines()))
+sys.exit(0)
+PY
+      then
+        pass "CSV zip captured and content verified"
+      else
+        fail "CSV zip content verification"
+      fi
+    else
+      fail "csv zip found in app cache"
+    fi
+  else
+    fail "csv export button"
+  fi
+else
+  fail "settings tab (csv)"
+fi
+
+# ------------------------------------------------- delete-baby cascade ------
+echo "=== 9. delete-baby cascade (create QA4, delete it, siblings untouched) ==="
+if wait_for_text "Family" 6; then
+  tap_text "Family"
+  sleep 2
+  if tap_text "Add another child"; then
+    sleep 3
+    type_edit 0 "QA4" || fail "QA4 name"
+    type_edit 1 "2026-10-05" || fail "QA4 dob"
+    tap_text "Create profile"
+    sleep 4
+    if dump_has "QA4"; then
+      pass "QA4 created for cascade test"
+      if tap_desc "Delete QA4" || tap_text "Delete"; then
+        sleep 3
+        # confirmation dialog - the destructive-operation gate
+        if dump_has "Delete this profile?"; then
+          pass "delete asks for confirmation"
+          if tap_text "Delete profile"; then
+            pass "delete confirmed"
+            sleep 4
+            if wait_for_text "Family" 6; then
+              sleep 2
+              if dump_has "QA4"; then
+                fail "delete-baby cascade (QA4 still present)"
+              elif dump_has "QA1" && dump_has "QA2"; then
+                pass "delete-baby cascade: QA4 gone, QA1/QA2 untouched"
+              else
+                fail "delete-baby cascade (siblings affected)"
+              fi
+            else
+              fail "family after delete"
+            fi
+          else
+            fail "delete confirm button"
+          fi
+        else
+          fail "delete confirmation dialog"
+        fi
+      else
+        fail "delete profile control"
+      fi
+    else
+      fail "QA4 created"
+    fi
+  else
+    fail "add another child (cascade)"
+  fi
+else
+  fail "family tab (cascade)"
+fi
+shot "10-cascade"
+
+# ------------------------------------------------------------- evidence -----
 timeout 30 adb logcat -d -b crash > "$OUT/crash-buffer.txt" 2>/dev/null || true
 timeout 30 adb logcat -d -t 2000 > "$OUT/logcat-tail.txt" 2>/dev/null || true
+
+# Critical evidence gate: a run may not report green if its evidence vanished.
+MISSING=""
+for f in 01-launch.png 03-logged.png 04-two-babies.png 06-relaunch.png 07-final.png; do
+  [ -s "$OUT/$f" ] || MISSING="$MISSING $f"
+done
+DUMPS=$(ls "$OUT/dumps" 2>/dev/null | wc -l)
+[ "$DUMPS" -ge 10 ] || MISSING="$MISSING dumps(<10)"
+[ -s "$OUT/notification-record.txt" ] || MISSING="$MISSING notification-record.txt"
+[ -s exported.json ] || MISSING="$MISSING exported.json"
+[ -s "$OUT/exported-sha.txt" ] || MISSING="$MISSING exported-sha.txt"
+CSVZ=$(ls "$OUT"/ninninest-csv-*.zip 2>/dev/null | head -1)
+[ -n "$CSVZ" ] || MISSING="$MISSING csv-zip"
+if [ -n "$MISSING" ]; then
+  echo "MISSING EVIDENCE:$MISSING"
+  fail "critical evidence present"
+fi
+
 echo "=== SUMMARY: PASS=$PASS FAIL=$FAIL ==="
+if [ "$FAIL" -gt 0 ]; then
+  echo "ACCEPTANCE FAILED: $FAIL assertion(s) failed"
+  exit 1
+fi
+echo "ACCEPTANCE PASSED"
 exit 0

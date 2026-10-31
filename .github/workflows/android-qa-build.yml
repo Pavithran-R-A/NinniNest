@@ -37,10 +37,20 @@ jobs:
       - name: Generate native project (versioned config plugins)
         run: npx expo prebuild --platform android --no-install --clean
 
+      # QA instrumentation: make the release build debuggable so `adb run-as`
+      # can read the app's cache during acceptance (true export/CSV byte
+      # capture). Debug-signed, never used for store submission.
+      - name: Enable run-as instrumentation on the QA build
+        working-directory: android
+        run: |
+          grep -n "release {" app/build.gradle
+          sed -i '0,/release {/s//release {\n            debuggable true/' app/build.gradle
+          grep -n "debuggable true" app/build.gradle
+
       # Release build: embeds the JS bundle (no Metro dev server dependency)
       # and is signed with the debug keystore by the Expo template, so the
       # artifact is standalone-installable. Not a production signing.
-      - name: Build QA APK (release, debug-signed)
+      - name: Build QA APK (release, debug-signed, debuggable for QA)
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon --console=plain
 

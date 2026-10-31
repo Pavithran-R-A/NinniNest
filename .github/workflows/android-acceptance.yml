@@ -1,35 +1,117 @@
 name: android-acceptance
 
-# Manual-dispatch cloud-emulator acceptance for the exact release-branch HEAD.
-# Reuses the existing exact-source QA APK artifact (no Android rebuild).
+# Cloud-emulator acceptance for the EXACT release-branch HEAD.
+# Dispatch-only: run AFTER android-qa-build has produced the QA APK for the
+# commit being certified. The workflow resolves that exact artifact (name
+# embeds the commit SHA) — no silent fallback to any older artifact —
+# verifies package identity and version from the checked-out app.json, and
+# gates the workflow on the script's exit status (FAIL>0 => red run).
 # Synthetic data only; artifacts are short-retention and contain no personal data.
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - release/ninninest-safety-zcode-20261026
-    paths:
-      - '.github/workflows/android-acceptance.yml'
-      - 'qa/cloud/**'
 
 permissions:
   contents: read
 
 jobs:
-  emulator-acceptance:
+  selftest:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 5
     steps:
       - name: Checkout exact release-branch commit
         uses: actions/checkout@v4
         with:
           ref: release/ninninest-safety-zcode-20261026
 
-      - uses: actions/setup-node@v4
+      - name: Prove the failure mechanism (deliberate failing test must exit 1)
+        run: |
+          set +e
+          SELFTEST=1 bash qa/cloud/acceptance.sh
+          rc1=$?
+          set -e
+          if [ "$rc1" -ne 1 ]; then
+            echo "::error::failure mechanism broken: deliberate FAIL exited $rc1 (expected 1)"
+            exit 1
+          fi
+          set +e
+          SELFTEST=1 bash qa/cloud/acceptance-env.sh
+          rc2=$?
+          set -e
+          if [ "$rc2" -ne 1 ]; then
+            echo "::error::env failure mechanism broken: deliberate FAIL exited $rc2 (expected 1)"
+            exit 1
+          fi
+          echo "Both scripts: failing assertions produce exit 1. Gate wiring proven."
+
+  resolve-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      artifact-id: ${{ steps.resolve.outputs.id }}
+      apk-sha256: ${{ steps.verify.outputs.sha256 }}
+      head-sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - name: Checkout exact release-branch commit
+        uses: actions/checkout@v4
         with:
-          node-version: '22'
-          cache: npm
+          ref: release/ninninest-safety-zcode-20261026
+
+      - name: Record HEAD SHA
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve the exact-source QA APK artifact (no fallback)
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          NAME="ninninest-qa-apk-$SHA"
+          ID=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=$NAME" --jq '.artifacts[0].id // empty')
+          if [ -z "$ID" ]; then
+            echo "::error::No artifact '$NAME'. Run android-qa-build on this exact commit first. No older artifact will be substituted."
+            exit 1
+          fi
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          echo "Resolved exact-source artifact: $NAME (id=$ID)"
+
+      - name: Download, hash, and verify package identity
+        id: verify
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ID="${{ steps.resolve.outputs.id }}"
+          mkdir -p apk
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ID/zip" > artifact.zip
+          unzip -o artifact.zip -d apk >/dev/null
+          APK=$(find apk -name "*.apk" | head -1)
+          [ -n "$APK" ] || { echo "::error::artifact zip contains no APK"; exit 1; }
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "$SHA  $(basename "$APK")" | tee qa-cloud-apk-sha.txt
+          # expected identity straight from the checked-out source
+          EXPECT_NAME=$(node -p "require('./app.json').expo.android.package || 'app.ninninest.journal'")
+          EXPECT_VER=$(node -p "require('./app.json').expo.version")
+          EXPECT_VC=$(node -p "require('./app.json').expo.android.versionCode")
+          AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort | tail -1)
+          BADGE=$("$AAPT" dump badging "$APK")
+          echo "$BADGE" | head -5
+          echo "$BADGE" | grep -q "package: name='$EXPECT_NAME'" || { echo "::error::package mismatch"; exit 1; }
+          echo "$BADGE" | grep -q "versionName='$EXPECT_VER'" || { echo "::error::versionName mismatch (expected $EXPECT_VER)"; exit 1; }
+          echo "$BADGE" | grep -q "versionCode='$EXPECT_VC'" || { echo "::error::versionCode mismatch (expected $EXPECT_VC)"; exit 1; }
+          echo "$BADGE" | grep -q "application-debuggable" || { echo "::error::QA APK must be debuggable for run-as capture"; exit 1; }
+          echo "APK identity verified: $EXPECT_NAME $EXPECT_VER/$EXPECT_VC debuggable, SHA-256 $SHA"
+
+  acceptance-core:
+    needs: [selftest, resolve-apk]
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - name: Checkout exact release-branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: release/ninninest-safety-zcode-20261026
 
       - uses: actions/setup-java@v4
         with:
@@ -43,21 +125,17 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           ls /dev/kvm
 
-      - name: Reuse exact-source QA APK artifact (no rebuild)
-        uses: actions/download-artifact@v4
-        with:
-          name: ninninest-qa-apk-33f1c3a70f2bf7230644d776bf90183d67cd9e6d
-          path: apk
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          run-id: 41092946811
-
-      - name: Verify APK provenance
+      - name: Download verified exact-source APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ls -la apk/
-          sha256sum apk/app-release.apk | tee qa-cloud-apk-sha.txt
+          ID="${{ needs.resolve-apk.outputs.artifact-id }}"
+          mkdir -p apk
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ID/zip" > artifact.zip
+          unzip -o artifact.zip -d apk >/dev/null
+          sha256sum apk/*.apk
 
-      - name: Run cloud-emulator acceptance (synthetic data)
+      - name: Run cloud-emulator acceptance core (synthetic data)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -71,13 +149,68 @@ jobs:
             adb install -r apk/app-release.apk
             bash qa/cloud/acceptance.sh
 
-      - name: Upload acceptance evidence (synthetic only)
+      - name: Upload core acceptance evidence (synthetic only)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-acceptance-evidence
+          name: android-acceptance-core
           path: |
             qa-cloud/
             qa-cloud-apk-sha.txt
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: warn
+
+  acceptance-env:
+    needs: [selftest, resolve-apk]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout exact release-branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: release/ninninest-safety-zcode-20261026
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Enable KVM (documented hosted-runner method)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls /dev/kvm
+
+      - name: Download verified exact-source APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ID="${{ needs.resolve-apk.outputs.artifact-id }}"
+          mkdir -p apk
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ID/zip" > artifact.zip
+          unzip -o artifact.zip -d apk >/dev/null
+          sha256sum apk/*.apk
+
+      - name: Run cloud-emulator acceptance env (synthetic data)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install -r apk/app-release.apk
+            bash qa/cloud/acceptance-env.sh
+
+      - name: Upload env acceptance evidence (synthetic only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-acceptance-env
+          path: qa-cloud-env/
+          retention-days: 7
+          if-no-files-found: warn

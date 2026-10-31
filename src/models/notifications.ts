@@ -97,10 +97,13 @@ export async function syncRoutineNotifications(
           title: 'NinniNest routine',
           body: 'Scheduled reminder. Log it in the journal if it happened.',
           sound: false,
-          ...(Platform.OS === 'android' ? { channelId: ROUTINE_CHANNEL_ID } : {}),
         },
         trigger: {
           type: 'weekly',
+          // SDK 57: the delivery channel is a property of the TRIGGER. Placing
+          // channelId in the content left every delivery on expo's fallback
+          // channel (observed in cloud acceptance run 41197666104).
+          ...(Platform.OS === 'android' ? { channelId: ROUTINE_CHANNEL_ID } : {}),
           weekday: trigger.weekday,
           hour: trigger.hour,
           minute: trigger.minute,
