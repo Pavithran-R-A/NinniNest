@@ -44,7 +44,7 @@ Onboarding E2E, quick-log diaper, IndexedDB reload persistence, night theme — 
 - Local-only posture hardened: `expo-notifications` moved from remote-push mode to `broadcast` (no push capability declared).
 
 ### Gates (latest certified)
-`npm run typecheck` 0 · `npm test` 0 — **263/263, 24 files** · web export 0 · CI green on hosted runner · expo-doctor 1 (informational CNG notice only).
+`npm run typecheck` 0 · `npm test` 0 — **272/272, 26 files** (2026-10-31, `bd7509a`) · web export 0 · CI green on hosted runner · expo-doctor 1 (informational CNG notice only) · cloud acceptance run [41197666104](https://github.com/Pavithran-R-A/NinniNest/actions/runs/41197666104) 14/14 PASS on exact-source APK `8e89683`; the corrected acceptance workflow (exit gate, self-test, exact-HEAD artifact resolution, channel assertion, export roundtrip, env job) is published and runs from `bbc6c59` onward.
 
 ### Remaining to full 100% (honest)
 Device sessions for: reminder delivery + reboot, backup/restore with photos on device, timer across restart, 320–412dp/Tamil/dynamic-type visual matrix, Play-store privacy declarations. All infrastructure to produce and verify each of these now exists and is reproducible from a clean checkout.

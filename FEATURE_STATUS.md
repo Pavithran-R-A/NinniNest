@@ -1,6 +1,19 @@
 # FEATURE_STATUS.md
 
-Last updated: 2026-10-26 (0.9.1 — first real Android run; CI green; APK from clean checkout)
+Last updated: 2026-10-31 (certification corrections: acceptance integrity gate, exact-HEAD provenance, notification channel fix, true export roundtrip; suite 272/272)
+
+## 2026-10-31 — certification corrections (bbc6c59 / bd7509a)
+| Aspect | Status |
+| --- | --- |
+| Acceptance integrity | DONE — scripts exit nonzero on any failed assertion; missing evidence fails the run; a deliberate-failure self-test runs as a workflow job on every dispatch |
+| Exact-source APK provenance | DONE — dispatch-only acceptance resolves `ninninest-qa-apk-<HEAD-SHA>` (no fallback); aapt2 verifies package/versionName/versionCode against app.json + debuggable flag |
+| Notification channel | FIXED — SDK 57 `WeeklyTriggerInput.channelId` (was content-level → fallback channel in run 41197666104); 6 regression tests; strict tray assertion matches pkg+channel+tag on one record |
+| True export roundtrip | DONE (automation) — `run-as` captures the share-sheet flow's actual cache file; pm clear → fresh onboarding → import of THOSE EXACT bytes via the real picker; merge/replace-all/tampered preservation asserted |
+| Environment acceptance | DONE (automation) — independent job: reboot + alarm rescheduling, permission denial, 320/360/393/412dp, Day/Night/Warm themes, Tamil, font scale 1.3, delete confirmation |
+| Dependency advisories | ANALYZED — 27 findings, no critical/high in the shipped runtime bundle (dev/build toolchain; direct zod 4.6.7 not in range); reachability table in docs/KNOWN_LIMITATIONS.md |
+| Suite | **272/272, 26 files**; typecheck 0 |
+
+## 0.9.1 — release mission (2026-10-26)
 
 ## 0.9.1 — release mission (2026-10-26)
 | Aspect | Status |
