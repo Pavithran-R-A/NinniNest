@@ -86,7 +86,10 @@ print((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
 PY
 )
     if [ -z "$cur" ]; then cur="ABSENT"; fi
-    if [ "$cur" = "ABSENT" ]; then sleep 2; continue; fi
+    if [ "$cur" = "ABSENT" ]; then
+      dismiss_system_dialogs || sleep 2
+      continue
+    fi
     if [ "$cur" = "$prev" ]; then break; fi
     prev="$cur"
     sleep 2
@@ -100,20 +103,30 @@ PY
   return 0
 }
 
-wait_for_text() { # poll up to N seconds; dismisses system ANR dialogs while polling
+# The dump only sees the ACTIVE window: the POST_NOTIFICATIONS permission
+# dialog (package com.google.android.permissioncontroller) hides the app
+# completely when it pops mid-flow (found in cloud runs 5 and 6). Whenever
+# that window is active, dismiss it with "Allow" before looking further.
+dismiss_system_dialogs() {
+  if grep -q 'com.google.android.permissioncontroller' /tmp/acc.xml 2>/dev/null; then
+    tap_text "Allow" || true
+    sleep 2
+    return 0
+  fi
+  if grep -q "isn't responding" /tmp/acc.xml 2>/dev/null; then
+    tap_text "Wait" || true
+    sleep 2
+    return 0
+  fi
+  return 1
+}
+
+wait_for_text() { # poll up to N seconds; dismisses system dialogs while polling
   local text="$1" tries="${2:-10}"
   for _ in $(seq 1 "$tries"); do
     if tap_text "$text"; then return 0; fi
     dump
-    if python3 - /tmp/acc.xml <<'PY'
-import re, sys, os
-s = open(os.environ.get('ACC', '/tmp/acc.xml'), encoding='utf-8', errors='replace').read()
-sys.exit(0 if "isn't responding" in s else 1)
-PY
-    then
-      tap_text "Wait" || true
-    fi
-    sleep 2
+    dismiss_system_dialogs || sleep 2
   done
   return 1
 }
@@ -132,7 +145,11 @@ echo "=== 1. cold launch + permission + onboarding ==="
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 sleep 12
 shot "01-launch"
-tap_text "Allow" && pass "notification permission granted" || echo "no permission dialog (ok)"
+if wait_for_text "Allow" 4; then
+  pass "notification permission granted"
+else
+  echo "no permission dialog (ok)"
+fi
 if wait_for_text "Begin without an account" 8; then
   pass "welcome screen"
 else
