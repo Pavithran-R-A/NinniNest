@@ -105,5 +105,14 @@ Reuses the exact-source QA APK artifact (run 41092946811, SHA 33f1c3a70f…) —
 
 Harness capability proven so far: cold launch, system-permission grant, ANR recovery, text-bound tapping, keyboard-aware typing, dumpsys alarm/notification inspection, force-stop, push-file + picker navigation.
 
+## CERTIFICATION CORRECTIONS (2026-10-31, mission 7 — integrity, provenance, channel, roundtrip)
+- **Acceptance integrity**: scripts exit NONZERO on any failed assertion; missing critical evidence fails the run; `SELFTEST=1` injects a deliberate failure and must exit 1 (proven locally and enforced as a workflow job on every dispatch). Obsolete/duplicate classifications removed.
+- **Exact-source APK**: the acceptance workflow is dispatch-only and resolves `ninninest-qa-apk-<HEAD-SHA>` via the GitHub API — no silent fallback (a missing exact artifact aborts with an explicit error); aapt2 verifies package name, versionName and versionCode against the checked-out app.json plus the debuggable flag needed for `run-as`.
+- **Notification channel**: SDK 57 `WeeklyTriggerInput.channelId` — the channel moved from notification content to the trigger (`bbc6c59`); 6 regression tests added (272/272 total). The strict tray assertion requires ONE record line matching pkg + `channel=routine-reminders` + `tag=routine-<uuid>-<day>`; verified it rejects the pre-fix fallback-channel record from run 13.
+- **QA build**: release build is now debuggable (run-as instrumentation, debug-signed, test artifact only).
+- **True export roundtrip**: acceptance section 7 captures the export file the share-sheet flow ACTUALLY wrote (`run-as cat cache/ninninest-backup-<date>.json`), verifies v5 structure + embedded photo SHA-256 self-consistency, `pm clear`s, re-onboards, and imports THOSE EXACT bytes through the real picker (merge + replace-all + tampered rejection with preservation checks).
+- **Toolchain incident (honest record)**: an `npm audit fix` attempt exhausted the disk mid-install and corrupted `node_modules`; `package-lock.json` was never modified. The disposable AVD userdata (11 GB, synthetic data, evidence already captured) was deleted to recover 11 GB, the toolchain restored with `npm ci`, and all gates re-verified (typecheck 0, 272/272). No dependency change was applied; the advisory reachability analysis lives in `docs/KNOWN_LIMITATIONS.md`.
+- Gate status at push: typecheck 0 · 272/272 tests · CI green (41206564942) · QA APK built for `bbc6c59` (run 41206564975, SUCCESS).
+
 ## BLOCKED / NOT EXECUTABLE
 - Local Gradle builds (disk); EAS (no account); real expo-sqlite runtime (needs device/APK).
