@@ -18,6 +18,18 @@ dump() {
   adb shell cat /sdcard/acc.xml > /tmp/acc.xml 2>/dev/null
 }
 
+# Dismiss the soft keyboard only when it is actually shown (a blind back
+# press with no keyboard navigates BACK and can close the sheet).
+kb_visible() {
+  adb shell dumpsys input_method 2>/dev/null | grep -q "mInputShown=true"
+}
+hide_kb() {
+  if kb_visible; then
+    adb shell input keyevent 4
+    sleep 1.5
+  fi
+}
+
 # Tap the center of the node whose visible text matches exactly. Returns 1 if absent.
 tap_text() {
   dump
@@ -61,6 +73,7 @@ PY
   sleep 1
   adb shell input text "$value"
   adb shell input keyevent 66
+  hide_kb
   return 0
 }
 
@@ -111,7 +124,7 @@ PY
 adb shell input tap $xy
 sleep 1
 adb shell input text "2026-08-14"
-adb shell input keyevent 4
+hide_kb
 sleep 1
 if wait_for_text "Create profile" 6; then
   tap_text "Create profile"
@@ -157,7 +170,7 @@ PY
   adb shell input tap $xy
   sleep 1
   adb shell input text "2026-09-10"
-  adb shell input keyevent 4
+  hide_kb
   sleep 1
   tap_text "Create profile"
   sleep 4
@@ -198,7 +211,7 @@ PY
   adb shell input keyevent 123
   for _ in 1 2 3 4 5; do adb shell input keyevent 67; done
   adb shell input text "$TARGET"
-  adb shell input keyevent 4
+  hide_kb
   sleep 1
   tap_text "Save routine"
   sleep 4
