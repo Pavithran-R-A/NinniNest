@@ -9,7 +9,7 @@ PASS=0
 FAIL=0
 PKG=app.ninninest.journal
 
-shot() { adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null || true; }
+shot() { timeout 60 adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null || true; }
 pass() { PASS=$((PASS + 1)); echo "PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "FAIL: $1"; shot "FAIL-$1"; }
 
@@ -18,11 +18,11 @@ dump() {
   SEQ=$((SEQ + 1))
   local d_out d_file="/sdcard/acc-$SEQ.xml"
   for _ in 1 2 3; do
-    d_out=$(adb shell uiautomator dump "$d_file" 2>&1)
+    d_out=$(timeout 30 adb shell uiautomator dump "$d_file" 2>&1)
     if printf '%s' "$d_out" | grep -qi "dumped to"; then
-      adb shell cat "$d_file" > /tmp/acc.xml 2>/dev/null
+      timeout 30 adb shell cat "$d_file" > /tmp/acc.xml 2>/dev/null
       gzip -c /tmp/acc.xml > "$OUT/dumps/$(printf '%03d' $SEQ).xml.gz" 2>/dev/null || true
-      adb shell rm -f "$d_file" >/dev/null 2>&1
+      timeout 30 adb shell rm -f "$d_file" >/dev/null 2>&1
       return 0
     fi
     sleep 1.5
@@ -35,11 +35,11 @@ dump() {
 # Dismiss the soft keyboard only when it is actually shown (a blind back
 # press with no keyboard navigates BACK and can close the sheet).
 kb_visible() {
-  adb shell dumpsys input_method 2>/dev/null | grep -q "mInputShown=true"
+  timeout 30 adb shell dumpsys input_method 2>/dev/null | grep -q "mInputShown=true"
 }
 hide_kb() {
   if kb_visible; then
-    adb shell input keyevent 4
+    timeout 30 adb shell input keyevent 4
     sleep 2.5
   fi
 }
@@ -61,7 +61,7 @@ print((x1 + x2) // 2, (y1 + y2) // 2)
 PY
 )
   if [ "$xy" = "NOT_FOUND" ]; then return 1; fi
-  adb shell input tap $xy
+  timeout 30 adb shell input tap $xy
   return 0
 }
 
@@ -95,10 +95,15 @@ PY
     sleep 2
   done
   if [ -z "$cur" ] || [ "$cur" = "ABSENT" ]; then return 1; fi
-  adb shell input tap $cur
+  timeout 30 adb shell input tap $cur
   sleep 1.5
-  adb shell input text "$value"
-  adb shell input keyevent 66
+  if [ "${3:-0}" = "1" ]; then
+    # field ships a pre-filled default (routine time): move-to-end, backspace
+    timeout 30 adb shell input keyevent 123
+    for _ in 1 2 3 4 5 6 7 8; do timeout 30 adb shell input keyevent 67; done
+  fi
+  timeout 30 adb shell input text "$value"
+  timeout 30 adb shell input keyevent 66
   hide_kb
   return 0
 }
@@ -146,8 +151,8 @@ echo "=== 1. cold launch + permission + onboarding ==="
 # contention (dumps in run 7 show its dialog stealing the active window
 # every ~20-30 s; "Wait" only postpones). Hiding system error/ANR dialogs
 # keeps the app window dumpable and tappable for the whole run.
-adb shell settings put secure hide_error_dialogs 1
-adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+timeout 30 adb shell settings put secure hide_error_dialogs 1
+timeout 30 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 sleep 12
 shot "01-launch"
 if wait_for_text "Allow" 4; then
@@ -165,9 +170,9 @@ if ! type_edit 0 "QA1"; then
   # Recovery: cold-restart the app (clears UI-automation/accessibility wedges)
   # and redo the welcome -> form path once.
   echo "input absent; restarting app once"
-  adb shell am force-stop $PKG
+  timeout 30 adb shell am force-stop $PKG
   sleep 2
-  adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+  timeout 30 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
   sleep 10
   tap_text "Allow" || true
   if wait_for_text "Begin without an account" 8; then
@@ -210,7 +215,7 @@ echo "=== 3. second baby QA2 ==="
 if wait_for_text "Family" 6; then
   tap_text "Family"
   sleep 2
-  tap_text "Add a baby" && pass "add a baby opened" || fail "add a baby"
+  tap_text "Add another child" && pass "add another child opened" || fail "add another child"
   sleep 3
   type_edit 0 "QA2" || fail "QA2 name"
   type_edit 1 "2026-09-10" && pass "QA2 dob typed" || fail "QA2 dob input"
@@ -229,52 +234,39 @@ if wait_for_text "Routines" 6; then
   tap_text "Add routine"
   sleep 3
   type_edit 0 "CloudNap" || fail "routine name"
-  NOW=$(adb shell date +%H:%M | tr -d '\r')
+  NOW=$(timeout 30 adb shell date +%H:%M | tr -d '\r')
   HH=${NOW%%:*}
   MM=$((10#${NOW##*:} + 2))
   if [ "$MM" -ge 60 ]; then MM=$((MM - 60)); HH=$(((HH + 1) % 24)); fi
   TARGET=$(printf '%02d:%02d' "$HH" "$MM")
   echo "target delivery time: $TARGET"
-  dump
-  xy=$(python3 - <<'PY'
-import re
-s = open('/tmp/acc.xml', encoding='utf-8').read()
-m = re.search(r'text="Time of day"', s)
-if m:
-    b = [int(x) for x in re.findall(r'\d+', m.group(1))]
-    # the input sits below the label
-    print(b[0], b[1] + 60)
-else:
-    print('NOT_FOUND')
-PY
-)
-  adb shell input tap $xy
   sleep 1
-  adb shell input keyevent 123
-  for _ in 1 2 3 4 5; do adb shell input keyevent 67; done
-  adb shell input text "$TARGET"
-  hide_kb
-  sleep 1
+  # the time input is the form's second EditText and ships a default value
+  type_edit 1 "$TARGET" 1 || fail "routine time entry"
   tap_text "Save routine"
   sleep 4
+  SAVED=0
   if wait_for_text "· $TARGET ·" 6 || dump_has "$TARGET"; then
     pass "routine saved and listed"
+    SAVED=1
   else
     fail "routine saved and listed"
   fi
-  adb shell dumpsys alarm 2>/dev/null | grep -q "2026-$(adb shell date +%m | tr -d '\r') $TARGET"
-  if [ $? -eq 0 ]; then pass "alarm scheduled for $TARGET"; else fail "alarm scheduled for $TARGET"; fi
-  adb shell input keyevent 3
-  sleep 2
-  echo "app backgrounded; waiting for $TARGET plus margin"
-  WAIT=$(( ($(date +%M) - 10#$MM + 60) % 60 ))
-  [ "$WAIT" -lt 0 ] && WAIT=0
-  sleep $((WAIT * 60 + 45))
-  adb shell dumpsys notification --noredact > "$OUT/notification-dump.txt" 2>/dev/null
-  if grep -q "routine-reminders" "$OUT/notification-dump.txt" && grep -qE "NotificationRecord\(.*$PKG" "$OUT/notification-dump.txt"; then
-    pass "notification delivered to tray while backgrounded"
-  else
-    fail "notification delivered to tray while backgrounded"
+  if [ "$SAVED" = "1" ]; then
+    timeout 30 adb shell dumpsys alarm 2>/dev/null | grep -qE "RTC_WAKEUP.*$TARGET"
+    if [ $? -eq 0 ]; then pass "alarm scheduled for $TARGET"; else fail "alarm scheduled for $TARGET"; fi
+    timeout 30 adb shell input keyevent 3
+    sleep 2
+    echo "app backgrounded; waiting for $TARGET plus margin"
+    NOWM=$(timeout 30 adb shell date +%M | tr -d '\r')
+    WAIT=$(( (10#$NOWM - 10#$MM + 60) % 60 ))
+    sleep $((WAIT * 60 + 45))
+    timeout 30 adb shell dumpsys notification --noredact > "$OUT/notification-dump.txt" 2>/dev/null
+    if grep -q "routine-reminders" "$OUT/notification-dump.txt" && grep -qE "NotificationRecord\(.*$PKG" "$OUT/notification-dump.txt"; then
+      pass "notification delivered to tray while backgrounded"
+    else
+      fail "notification delivered to tray while backgrounded"
+    fi
   fi
   shot "05-notification"
 else
@@ -282,9 +274,9 @@ else
 fi
 
 echo "=== 5. force-stop + relaunch persistence ==="
-adb shell am force-stop $PKG
+timeout 30 adb shell am force-stop $PKG
 sleep 2
-adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+timeout 30 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 sleep 12
 if dump_has "QA1"; then
   pass "data persists after force-stop"
@@ -297,11 +289,11 @@ echo "=== 6. malformed-JSON import rejection ==="
 cat > malformed.json <<'JSON'
 {"app":"NinniNest","backupVersion":5,"data":{"babies":[{"id":"X
 JSON
-adb push malformed.json /sdcard/Download/malformed.json >/dev/null 2>&1
+timeout 60 adb push malformed.json /sdcard/Download/malformed.json >/dev/null 2>&1
 if wait_for_text "Settings" 6; then
   tap_text "Settings"
   sleep 2
-  adb shell input swipe 540 1900 540 600 800
+  timeout 30 adb shell input swipe 540 1900 540 600 800
   sleep 1
   if tap_text "Import a backup"; then
     sleep 4
@@ -319,7 +311,7 @@ else:
 PY
 )
     if [ "$xy" != "NOT_FOUND" ]; then
-      adb shell input tap $xy
+      timeout 30 adb shell input tap $xy
       sleep 2
       tap_text "Downloads"
       sleep 2
@@ -328,7 +320,7 @@ PY
       sleep 4
       if wait_for_text "This backup cannot be imported" 6; then
         pass "malformed JSON rejected"
-        tap_text "OK" || adb shell input keyevent 4
+        tap_text "OK" || timeout 30 adb shell input keyevent 4
       else
         fail "malformed JSON rejected"
       fi
