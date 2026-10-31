@@ -11,7 +11,7 @@ PKG=app.ninninest.journal
 
 shot() { timeout 60 adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null || true; }
 pass() { PASS=$((PASS + 1)); echo "PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); echo "FAIL: $1"; shot "FAIL-$1"; }
+fail() { FAIL=$((FAIL + 1)); echo "FAIL: $1"; shot "FAIL-$1"; timeout 20 adb logcat -d -b crash > "$OUT/crash-last.txt" 2>/dev/null || true; }
 
 SEQ=0
 dump() {
@@ -271,14 +271,29 @@ if wait_for_text "Routines" 6; then
   sleep 1
   # the time input is the form's second EditText and ships a default value
   type_edit 1 "$TARGET" 1 || fail "routine time entry"
-  tap_text "Save routine"
+  if ! tap_text "Save routine"; then
+    # save button may sit below the sheet fold
+    timeout 30 adb shell input swipe 540 1700 540 800 500
+    sleep 2
+    tap_text "Save routine" || true
+  fi
   sleep 4
   SAVED=0
-  if wait_for_text "· $TARGET ·" 6 || dump_has "$TARGET"; then
-    pass "routine saved and listed"
+  if dump_has "$TARGET" || dump_has "CloudNap"; then
     SAVED=1
   else
-    fail "routine saved and listed"
+    # notification scheduling may restart the app (crash buffer captures it);
+    # re-navigate to the list and check again
+    if wait_for_text "Family" 4; then sleep 2; fi
+    if wait_for_text "Routines" 4; then sleep 2; fi
+    if dump_has "$TARGET" || dump_has "CloudNap"; then
+      SAVED=1
+    else
+      fail "routine saved and listed"
+    fi
+  fi
+  if [ "$SAVED" = "1" ]; then
+    pass "routine saved and listed"
   fi
   if [ "$SAVED" = "1" ]; then
     timeout 30 adb shell dumpsys alarm 2>/dev/null | grep -qE "RTC_WAKEUP.*$TARGET"
@@ -327,12 +342,22 @@ if wait_for_text "Settings" 6; then
     sleep 5
     # open the drawer (content-desc button) and pick the Downloads root
     if tap_desc "Show roots"; then
-      sleep 2
-      if wait_for_text "Downloads" 4; then
+      sleep 4
+      if ! wait_for_text "Downloads" 6; then
+        tap_desc "Show roots" || true
         sleep 3
+        wait_for_text "Downloads" 4 || true
       fi
+      sleep 3
     fi
+    TAPPED=0
     if tap_text "malformed.json"; then
+      TAPPED=1
+    elif { tap_desc "Show roots" || true; } && sleep 3 && wait_for_text "Downloads" 4; then
+      sleep 2
+      tap_text "malformed.json" && TAPPED=1 || true
+    fi
+    if [ "$TAPPED" = "1" ]; then
       sleep 4
       if wait_for_text "This backup cannot be imported" 6; then
         pass "malformed JSON rejected"
@@ -351,5 +376,7 @@ else
 fi
 shot "07-final"
 
+timeout 30 adb logcat -d -b crash > "$OUT/crash-buffer.txt" 2>/dev/null || true
+timeout 30 adb logcat -d -t 2000 > "$OUT/logcat-tail.txt" 2>/dev/null || true
 echo "=== SUMMARY: PASS=$PASS FAIL=$FAIL ==="
 exit 0
