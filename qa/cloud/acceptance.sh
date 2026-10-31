@@ -214,14 +214,17 @@ pick_download_file() { # <file name>
 
 # Find a control that may sit above or below the current viewport:
 # scroll to the top, then nudge down, tapping at each position.
-scroll_to_text() { # <text>
+scroll_to_text() { # <text> - tap on sight; to top, then page down
   if tap_text "$1"; then return 0; fi
   timeout 30 adb shell input swipe 540 600 540 1900 600
   sleep 1.5
   if tap_text "$1"; then return 0; fi
-  timeout 30 adb shell input swipe 540 1500 540 900 600
-  sleep 1.5
-  tap_text "$1"
+  for _ in 1 2 3 4 5; do
+    timeout 30 adb shell input swipe 540 1500 540 700 600
+    sleep 1.5
+    if tap_text "$1"; then return 0; fi
+  done
+  return 1
 }
 
 # ------------------------------------------------------------------ launch ---
@@ -324,35 +327,31 @@ open('qa-photo.png', 'wb').write(png)
 print('qa-photo.png written', len(png), 'bytes')
 PY
 timeout 60 adb push qa-photo.png /sdcard/Download/qa-photo.png >/dev/null 2>&1
+# the system PHOTO picker lists media-store images only: scan the volume so
+# the pushed PNG becomes visible
+timeout 30 adb shell content call --uri content://media/ --method scan_volume --arg external_primary >/dev/null 2>&1 || true
+sleep 3
 if wait_for_text "Family" 6; then
   sleep 2
   if tap_desc "Edit QA1"; then
     sleep 3
     if tap_text "Add photo" || tap_text "Replace photo"; then
-      sleep 6
-      # picker -> Downloads -> file -> crop confirm
-      if pick_download_file "qa-photo.png"; then
-        sleep 5
-        # crop screen: try the known confirm labels
-        if ! tap_text "Save"; then
-          if ! tap_desc "Done"; then
-            tap_text "Done" || tap_text "OK" || tap_desc "Save" || true
-          fi
-        fi
-        sleep 3
-        if tap_text "Save changes"; then
-          sleep 4
-          if dump_has "Remove photo" || dump_has "Replace photo"; then
-            pass "photo attached to QA1"
-            PHOTO=1
-          else
-            fail "photo attached to QA1"
-          fi
+      sleep 7
+      # system photo picker: the image item's content-desc is the file name
+      tap_desc "qa-photo.png" || tap_text "qa-photo.png" || true
+      sleep 5
+      # crop screen (allowsEditing) if it appears: try the confirm labels
+      tap_text "Save" || tap_desc "Done" || tap_text "Done" || tap_text "OK" || tap_desc "Save" || true
+      sleep 3
+      if tap_text "Save changes"; then
+        sleep 4
+        if dump_has "Remove photo" || dump_has "Replace photo"; then
+          pass "photo attached to QA1"
         else
-          fail "save changes (photo)"
+          fail "photo attached to QA1"
         fi
       else
-        fail "photo picked from Downloads"
+        fail "save changes (photo)"
       fi
     else
       fail "add-photo button"
@@ -363,6 +362,12 @@ if wait_for_text "Family" 6; then
 else
   fail "family tab (photo)"
 fi
+# unwind any open picker/sheet so later sections start from a clean state
+hide_kb
+timeout 30 adb shell input keyevent 4 || true
+sleep 2
+timeout 30 adb shell input keyevent 4 || true
+sleep 2
 
 # ------------------------------------------------------------ notifications ---
 echo "=== 4. notification: schedule + backgrounded delivery ==="
@@ -566,7 +571,7 @@ if [ "$ROUNDTRIP" = "1" ]; then
         sleep 4
         if wait_for_text "Review this import" 6; then
           pass "import review dialog shows the real file"
-          tap_text "Import"
+          tap_text "IMPORT" || tap_text "Import"
           sleep 6
           if wait_for_text "Family" 6; then
             tap_text "Family"
@@ -619,7 +624,7 @@ if [ "$ROUNDTRIP" = "1" ]; then
       if pick_download_file "$EXPORT_NAME"; then
         sleep 4
         if wait_for_text "Review this import" 6; then
-          tap_text "Import"
+          tap_text "IMPORT" || tap_text "Import"
           sleep 6
           if wait_for_text "Family" 6; then
             tap_text "Family"
@@ -756,7 +761,7 @@ if wait_for_text "Family" 6; then
         # confirmation dialog - the destructive-operation gate
         if dump_has "Delete this profile?"; then
           pass "delete asks for confirmation"
-          if tap_text "Delete profile"; then
+          if tap_text "DELETE PROFILE" || tap_text "Delete profile"; then
             pass "delete confirmed"
             sleep 4
             if wait_for_text "Family" 6; then

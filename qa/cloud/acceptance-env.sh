@@ -132,11 +132,22 @@ PY
   hide_kb
   return 0
 }
-onboard() { # <name> <dob> — first-run onboarding with granted permission
+onboard() { # <name> <dob> — first-run onboarding; retries a cold restart once
   launch
   sleep 12
   wait_for_text "Allow" 4 || echo "no permission dialog (ok)"
-  if ! wait_for_text "Begin without an account" 8; then fail "onboarding welcome ($1)"; return 1; fi
+  if ! wait_for_text "Begin without an account" 8; then
+    # the first launch can race the emulator's boot settle: restart once
+    echo "welcome absent; restarting app once"
+    timeout 30 adb shell am force-stop $PKG
+    sleep 2
+    launch
+    sleep 12
+    wait_for_text "Allow" 4 || true
+    if ! wait_for_text "Begin without an account" 8; then
+      fail "onboarding welcome ($1)"; return 1
+    fi
+  fi
   sleep 3
   type_edit 0 "$1" || { fail "onboarding name ($1)"; return 1; }
   type_edit 1 "$2" || { fail "onboarding dob ($1)"; return 1; }
@@ -144,7 +155,9 @@ onboard() { # <name> <dob> — first-run onboarding with granted permission
   if wait_for_text "QUICK LOG" 8; then pass "onboarding ($1)"; return 0; fi
   fail "onboarding today ($1)"; return 1
 }
-add_routine() { # <title> -> echoes HH:MM target; PASS/FAIL lines included
+ROUTINE_TARGET=""
+add_routine() { # <title> - sets ROUTINE_TARGET to the scheduled HH:MM
+  ROUTINE_TARGET=""
   if ! wait_for_text "Family" 6; then fail "family tab (routine $1)"; return 1; fi
   sleep 2
   if ! scroll_to_text "Routines"; then fail "routines segment (routine $1)"; return 1; fi
@@ -157,8 +170,8 @@ add_routine() { # <title> -> echoes HH:MM target; PASS/FAIL lines included
   HH=${NOW%%:*}
   MM=$((10#${NOW##*:} + 3))
   if [ "$MM" -ge 60 ]; then MM=$((MM - 60)); HH=$(((HH + 1) % 24)); fi
-  printf '%02d:%02d' "$HH" "$MM"
-  type_edit 1 "$(printf '%02d:%02d' "$HH" "$MM")" 1 || { fail "routine time (routine $1)"; return 1; }
+  ROUTINE_TARGET=$(printf '%02d:%02d' "$HH" "$MM")
+  type_edit 1 "$ROUTINE_TARGET" 1 || { fail "routine time (routine $1)"; return 1; }
   if ! scroll_to_text "Save routine"; then
     timeout 30 adb shell input swipe 540 1700 540 800 500
     sleep 2
@@ -174,8 +187,8 @@ timeout 30 adb shell settings put secure hide_error_dialogs 1
 
 echo "=== E2. reboot persistence + alarm rescheduling ==="
 if onboard "QA5" "2026-08-01"; then
-  TGT=$(add_routine "BootNap") || TGT=""
-  if [ -n "$TGT" ]; then
+  if add_routine "BootNap"; then
+    TGT="$ROUTINE_TARGET"
     timeout 30 adb shell dumpsys alarm 2>/dev/null | grep -qE "RTC_WAKEUP.*$TGT"
     if [ $? -eq 0 ]; then pass "alarm scheduled pre-reboot ($TGT)"; else fail "alarm scheduled pre-reboot"; fi
     echo "rebooting emulator"
@@ -239,9 +252,10 @@ if onboard "QA6" "2026-08-02"; then
 fi
 shot "E-denied"
 
-echo "=== E4. width/density matrix (pixel_5 1080px: 540/480/440/420dpi = 320/360/393/412dp) ==="
-for D in 540 480 440 420; do
-  DP=$((1080 * 160 / D))
+echo "=== E4. width/density matrix (pixel_5 1080px: exact dp targets) ==="
+# density 540=320dp, 480=360dp, 439=393dp, 419=412dp
+for PAIR in "540 320" "480 360" "439 393" "419 412"; do
+  D=${PAIR%% *}; DP=${PAIR##* }
   timeout 30 adb shell wm density "$D" >/dev/null 2>&1
   sleep 2
   timeout 30 adb shell am force-stop $PKG
@@ -294,9 +308,10 @@ if wait_for_text "Settings" 8; then
       tap_text "Settings"
       sleep 2
       if dump_has "Night · warm"; then
-        pass "warm-night theme persists across restart"
+        pass "warm-night selection persists across restart"
+        shot "E-theme-warm-persist"
       else
-        fail "warm-night theme persists across restart"
+        fail "warm-night selection persists across restart"
       fi
     else
       fail "settings after restart (theme)"
@@ -358,7 +373,7 @@ if wait_for_text "Family" 6; then
     # confirmation dialog - the destructive-operation gate
     if dump_has "Delete this profile?"; then
       pass "delete asks for confirmation"
-      tap_text "Keep it" || true
+      tap_text "KEEP IT" || tap_text "Keep it" || true
       sleep 3
       if dump_has "QA6"; then
         pass "cancel keeps the profile"
