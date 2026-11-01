@@ -434,7 +434,7 @@ goto_tab() { # <tab text>
   echo "tab '$1' absent; relaunching app once"
   restart_app
   wait_for_text "Allow" 3 || true
-  wait_for_text "$1" 6
+  wait_for_text "$1" 10
 }
 # unwind any open picker/sheet so later sections start from a clean state
 restart_app
@@ -494,6 +494,9 @@ if wait_for_text "Routines" 6; then
       pass "alarm scheduled for $TARGET"
     else
       fail "alarm scheduled for $TARGET"
+      # diagnostic for the record: the routine-* alarm section of dumpsys
+      timeout 30 adb shell dumpsys alarm > "$OUT/alarm-dump-on-failure.txt" 2>/dev/null || true
+      grep -E "routine-|RTC" "$OUT/alarm-dump-on-failure.txt" > "$OUT/alarm-routines.txt" 2>/dev/null || true
     fi
     timeout 30 adb shell input keyevent 3
     sleep 2
