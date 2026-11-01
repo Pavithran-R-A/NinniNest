@@ -175,6 +175,37 @@ PY
 # dialog (package com.google.android.permissioncontroller) hides the app
 # completely when it pops mid-flow (found in cloud runs 5 and 6). Whenever
 # that window is active, dismiss it with "Allow" before looking further.
+# type_edit + verification: GBoard can discard composing-state text when
+# focus moves (run 21: the nickname was empty at submit with a validation
+# error), so confirm the value really sits in an EditText and re-type once.
+type_edit_v() {
+  type_edit "$@" || return 1
+  dump
+  if ! VALUE="$(printf '%s' "$2")" python3 - /tmp/acc.xml <<'PY'
+import re, sys, os
+s = open('/tmp/acc.xml', encoding='utf-8', errors='replace').read()
+val = os.environ['VALUE']
+ets = re.findall(r'text="([^"]*)"[^>]*class="android\.widget\.EditText"', s)
+sys.exit(0 if any(t == val for t in ets) else 1)
+PY
+  then
+    echo "typed value not in an EditText; re-typing once"
+    type_edit "$@" || return 1
+    dump
+    VALUE="$(printf '%s' "$2")" python3 - /tmp/acc.xml <<'PY'
+import re, sys, os
+s = open('/tmp/acc.xml', encoding='utf-8', errors='replace').read()
+val = os.environ['VALUE']
+ets = re.findall(r'text="([^"]*)"[^>]*class="android\.widget\.EditText"', s)
+sys.exit(0 if any(t == val for t in ets) else 1)
+PY
+  fi
+}
+
+# The dump only sees the ACTIVE window: the POST_NOTIFICATIONS permission
+# dialog (package com.google.android.permissioncontroller) hides the app
+# completely when it pops mid-flow (found in cloud runs 5 and 6). Whenever
+# that window is active, dismiss it with "Allow" before looking further.
 dismiss_system_dialogs() {
   if grep -q 'com.google.android.permissioncontroller' /tmp/acc.xml 2>/dev/null; then
     tap_text "Allow" || true
@@ -266,7 +297,7 @@ else
   fail "welcome screen"; shot "01b"; exit 1
 fi
 sleep 3
-if ! type_edit 0 "QA1"; then
+if ! type_edit_v 0 "QA1"; then
   # Recovery: cold-restart the app (clears UI-automation/accessibility wedges)
   # and redo the welcome -> form path once.
   echo "input absent; restarting app once"
@@ -277,14 +308,14 @@ if ! type_edit 0 "QA1"; then
   tap_text "Allow" || true
   if wait_for_text "Begin without an account" 8; then
     sleep 3
-    type_edit 0 "QA1" && pass "baby name typed (after restart)" || { fail "baby name input"; shot "02"; exit 1; }
+    type_edit_v 0 "QA1" && pass "baby name typed (after restart)" || { fail "baby name input"; shot "02"; exit 1; }
   else
     fail "baby name input"; shot "02"; exit 1
   fi
 else
   pass "baby name typed"
 fi
-type_edit 1 "2026-08-14" && pass "dob typed" || fail "dob input"
+type_edit_v 1 "2026-08-14" && pass "dob typed" || fail "dob input"
 if wait_for_text "Begin the journal" 6; then
   sleep 2
   tap_text "Begin the journal"
@@ -318,8 +349,8 @@ if wait_for_text "Family" 6; then
   sleep 2
   tap_text "Add another child" && pass "add another child opened" || fail "add another child"
   sleep 3
-  type_edit 0 "QA2" || fail "QA2 name"
-  type_edit 1 "2026-09-10" && pass "QA2 dob typed" || fail "QA2 dob input"
+  type_edit_v 0 "QA2" || fail "QA2 name"
+  type_edit_v 1 "2026-09-10" && pass "QA2 dob typed" || fail "QA2 dob input"
   tap_text "Create profile"
   sleep 4
   if dump_has "QA2"; then pass "second baby created"; else fail "second baby created"; fi
@@ -601,8 +632,8 @@ if [ "$ROUNDTRIP" = "1" ]; then
   tap_text "Allow" || echo "no permission dialog after clear (ok)"
   if wait_for_text "Begin without an account" 8; then
     sleep 3
-    type_edit 0 "QA3" || fail "QA3 name"
-    type_edit 1 "2026-10-01" || fail "QA3 dob"
+    type_edit_v 0 "QA3" || fail "QA3 name"
+    type_edit_v 1 "2026-10-01" || fail "QA3 dob"
     wait_for_text "Begin the journal" 6 && sleep 2 && tap_text "Begin the journal"
     wait_for_text "QUICK LOG" 8 || fail "QA3 profile created"
   else
@@ -811,8 +842,8 @@ if wait_for_text "Family" 6; then
   sleep 2
   if tap_text "Add another child"; then
     sleep 3
-    type_edit 0 "QA4" || fail "QA4 name"
-    type_edit 1 "2026-10-05" || fail "QA4 dob"
+    type_edit_v 0 "QA4" || fail "QA4 name"
+    type_edit_v 1 "2026-10-05" || fail "QA4 dob"
     tap_text "Create profile"
     sleep 4
     if dump_has "QA4"; then

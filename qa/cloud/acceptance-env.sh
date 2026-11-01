@@ -72,6 +72,23 @@ PY
   timeout 30 adb shell input tap $xy
   return 0
 }
+# type_edit + verification (GBoard can discard composing-state text when
+# focus moves): confirm the value sits in an EditText, re-type once if not.
+type_edit_v() {
+  type_edit "$@" || return 1
+  dump
+  if ! VALUE="$(printf '%s' "$2")" python3 - /tmp/acc.xml <<'PY'
+import re, sys, os
+s = open('/tmp/acc.xml', encoding='utf-8', errors='replace').read()
+val = os.environ['VALUE']
+ets = re.findall(r'text="([^"]*)"[^>]*class="android\.widget\.EditText"', s)
+sys.exit(0 if any(t == val for t in ets) else 1)
+PY
+  then
+    echo "typed value not in an EditText; re-typing once"
+    type_edit "$@" || return 1
+  fi
+}
 dismiss_system_dialogs() {
   if grep -q 'com.google.android.permissioncontroller' /tmp/acc.xml 2>/dev/null; then
     tap_text "Allow" || true; sleep 2; return 0
@@ -165,8 +182,8 @@ onboard() { # <name> <dob> — first-run onboarding; retries a cold restart once
     fi
   fi
   sleep 3
-  type_edit 0 "$1" || { fail "onboarding name ($1)"; return 1; }
-  type_edit 1 "$2" || { fail "onboarding dob ($1)"; return 1; }
+  type_edit_v 0 "$1" || { fail "onboarding name ($1)"; return 1; }
+  type_edit_v 1 "$2" || { fail "onboarding dob ($1)"; return 1; }
   wait_for_text "Begin the journal" 6 && sleep 2 && tap_text "Begin the journal"
   if ! wait_for_text "QUICK LOG" 8; then
     # the save may have committed while the screen raced: restart and re-check
@@ -187,7 +204,7 @@ add_routine() { # <title> - sets ROUTINE_TARGET to the scheduled HH:MM
   sleep 1
   tap_text "Add routine" || { fail "add routine (routine $1)"; return 1; }
   sleep 3
-  type_edit 0 "$1" || { fail "routine name (routine $1)"; return 1; }
+  type_edit_v 0 "$1" || { fail "routine name (routine $1)"; return 1; }
   local NOW HH MM
   NOW=$(timeout 30 adb shell date +%H:%M | tr -d '\r')
   HH=${NOW%%:*}
