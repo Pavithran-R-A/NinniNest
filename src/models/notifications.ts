@@ -56,10 +56,21 @@ async function ensurePermission(): Promise<boolean> {
 
 async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
-  await Notifications.setNotificationChannelAsync(ROUTINE_CHANNEL_ID, {
-    name: 'Routine reminders',
-    importance: Notifications.AndroidImportance.DEFAULT,
-  }).catch(() => {});
+  // The channel must exist before any schedule call: on a cold emulator the
+  // notification service can reject the first attempt (observed in cloud
+  // runs 23/24 where every trigger then failed silently). Retry once.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await Notifications.setNotificationChannelAsync(ROUTINE_CHANNEL_ID, {
+        name: 'Routine reminders',
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+      return;
+    } catch {
+      if (attempt === 1) return; // scheduling will report its own failures
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  }
 }
 
 // Schedules weekly local notifications for every active routine. Reminders are
@@ -110,8 +121,12 @@ export async function syncRoutineNotifications(
         } as Notifications.WeeklyTriggerInput,
       });
       outcome.scheduled += 1;
-    } catch {
-      // individual trigger failure must not abort the rest
+    } catch (e) {
+      // individual trigger failure must not abort the rest — and must not
+      // vanish silently: the reason lands in the reported outcome
+      outcome.skipped.push(
+        e instanceof Error ? `trigger ${trigger.identifier}: ${e.message}` : `trigger ${trigger.identifier} failed`
+      );
     }
   }
   return outcome;

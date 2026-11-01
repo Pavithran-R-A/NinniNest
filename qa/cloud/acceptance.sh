@@ -426,6 +426,13 @@ restart_app() {
   sleep 2
   timeout 30 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
   sleep 12
+  # wait for the app window to actually hold focus before returning
+  for _ in 1 2 3 4 5 6; do
+    if timeout 20 adb shell dumpsys window 2>/dev/null | grep -q "Focus.*$PKG"; then
+      break
+    fi
+    sleep 2
+  done
 }
 # Ensure the app is foreground with the given tab text visible; relaunch once
 # if the first wait fails (transient background/cold-restart states).
