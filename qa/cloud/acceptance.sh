@@ -381,7 +381,7 @@ print('qa-photo.png written', len(png), 'bytes')
 PY
 node qa/tools/craft-backup.mjs qa-photo.png crafted-seed.json
 timeout 60 adb push crafted-seed.json /sdcard/Download/crafted-seed.json >/dev/null 2>&1
-if goto_tab "Settings"; then
+if goto_tab settings "Settings"; then
   tap_text "Settings"
   sleep 2
   if scroll_to_text "Import a backup"; then
@@ -438,12 +438,20 @@ restart_app() {
 }
 # Ensure the app is foreground with the given tab text visible; relaunch once
 # if the first wait fails (transient background/cold-restart states).
-goto_tab() { # <tab text>
-  if wait_for_text "$1" 4; then return 0; fi
-  echo "tab '$1' absent; relaunching app once"
+goto_tab() { # <route> <tab text> — deep-link first (scheme ninninest://,
+  # immune to the post-restart uiautomator wedges), verify by dump, and fall
+  # back to relaunch+tap when the deep link does not land
+  local route="$1" text="$2"
+  timeout 30 adb shell am start -a android.intent.action.VIEW -d "ninninest://$route" >/dev/null 2>&1
+  sleep 6
+  if wait_for_text "$text" 6; then return 0; fi
+  echo "deep link to '$route' did not land; relaunching app"
   restart_app
   wait_for_text "Allow" 3 || true
-  wait_for_text "$1" 10
+  if ! wait_for_text "$text" 6; then
+    tap_text "$text" || true
+    dump_has "$text"
+  fi
 }
 # unwind any open picker/sheet so later sections start from a clean state
 restart_app
@@ -452,7 +460,7 @@ restart_app
 echo "=== 4. notification: schedule + backgrounded delivery ==="
 # Creating a baby auto-switches to it and lands on Today; go back to Family
 if ! dump_has "Routines"; then
-  if goto_tab "Family"; then
+  if goto_tab family "Family"; then
     sleep 2
   else
     fail "family tab (routines path)"
@@ -557,7 +565,7 @@ cat > malformed.json <<'JSON'
 {"app":"NinniNest","backupVersion":5,"data":{"babies":[{"id":"X
 JSON
 timeout 60 adb push malformed.json /sdcard/Download/malformed.json >/dev/null 2>&1
-if goto_tab "Settings"; then
+if goto_tab settings "Settings"; then
   tap_text "Settings"
   sleep 2
   if scroll_to_text "Import a backup"; then
@@ -593,7 +601,7 @@ echo "=== 7. true exported-backup roundtrip (exact share-sheet bytes via run-as)
 # from the cache dir (building it from the device date broke at UTC
 # midnight: the app names by UTC date, the shell by local date).
 ROUNDTRIP=0
-if goto_tab "Settings"; then
+if goto_tab settings "Settings"; then
   sleep 1
   if scroll_to_text "Export backup (JSON)"; then
     sleep 6
@@ -828,7 +836,7 @@ fi
 
 # ----------------------------------------------------------- CSV/ZIP real ---
 echo "=== 8. CSV/ZIP export capture and content verification ==="
-if goto_tab "Settings"; then
+if goto_tab settings "Settings"; then
   tap_text "Settings"
   sleep 2
   if scroll_to_text "Export care history (CSV)"; then
