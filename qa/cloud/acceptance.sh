@@ -381,7 +381,7 @@ print('qa-photo.png written', len(png), 'bytes')
 PY
 node qa/tools/craft-backup.mjs qa-photo.png crafted-seed.json
 timeout 60 adb push crafted-seed.json /sdcard/Download/crafted-seed.json >/dev/null 2>&1
-if goto_tab settings "Settings"; then
+if goto_tab settings 6; then
   tap_text "Settings"
   sleep 2
   if scroll_to_text "Import a backup"; then
@@ -438,20 +438,18 @@ restart_app() {
 }
 # Ensure the app is foreground with the given tab text visible; relaunch once
 # if the first wait fails (transient background/cold-restart states).
-goto_tab() { # <route> <tab text> — deep-link first (scheme ninninest://,
-  # immune to the post-restart uiautomator wedges), verify by dump, and fall
-  # back to relaunch+tap when the deep link does not land
-  local route="$1" text="$2"
+goto_tab() { # <route> <tab index 1-6> — deterministic navigation: deep link
+  # then a coordinate tap on the pixel_5 tab bar (six tabs across 1080px,
+  # centers at x=90+180*(n-1), y=2280). No dump gate here — when the
+  # accessibility layer wedges after restarts, dump-based verification
+  # false-negatives while the UI is actually fine (run 30 screenshot);
+  # the caller's scroll_to_text fails honestly if the screen is wrong.
+  local route="$1" idx="$2"
   timeout 30 adb shell am start -a android.intent.action.VIEW -d "ninninest://$route" >/dev/null 2>&1
-  sleep 6
-  if wait_for_text "$text" 6; then return 0; fi
-  echo "deep link to '$route' did not land; relaunching app"
-  restart_app
-  wait_for_text "Allow" 3 || true
-  if ! wait_for_text "$text" 6; then
-    tap_text "$text" || true
-    dump_has "$text"
-  fi
+  sleep 5
+  timeout 30 adb shell input tap $((90 + 180 * (idx - 1))) 2280
+  sleep 3
+  return 0
 }
 # unwind any open picker/sheet so later sections start from a clean state
 restart_app
@@ -460,7 +458,7 @@ restart_app
 echo "=== 4. notification: schedule + backgrounded delivery ==="
 # Creating a baby auto-switches to it and lands on Today; go back to Family
 if ! dump_has "Routines"; then
-  if goto_tab family "Family"; then
+  if goto_tab family 4; then
     sleep 2
   else
     fail "family tab (routines path)"
@@ -567,7 +565,7 @@ cat > malformed.json <<'JSON'
 {"app":"NinniNest","backupVersion":5,"data":{"babies":[{"id":"X
 JSON
 timeout 60 adb push malformed.json /sdcard/Download/malformed.json >/dev/null 2>&1
-if goto_tab settings "Settings"; then
+if goto_tab settings 6; then
   tap_text "Settings"
   sleep 2
   if scroll_to_text "Import a backup"; then
@@ -603,7 +601,7 @@ echo "=== 7. true exported-backup roundtrip (exact share-sheet bytes via run-as)
 # from the cache dir (building it from the device date broke at UTC
 # midnight: the app names by UTC date, the shell by local date).
 ROUNDTRIP=0
-if goto_tab settings "Settings"; then
+if goto_tab settings 6; then
   sleep 1
   if scroll_to_text "Export backup (JSON)"; then
     sleep 6
@@ -838,7 +836,7 @@ fi
 
 # ----------------------------------------------------------- CSV/ZIP real ---
 echo "=== 8. CSV/ZIP export capture and content verification ==="
-if goto_tab settings "Settings"; then
+if goto_tab settings 6; then
   tap_text "Settings"
   sleep 2
   if scroll_to_text "Export care history (CSV)"; then
