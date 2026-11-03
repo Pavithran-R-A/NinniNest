@@ -211,12 +211,12 @@ add_routine() { # <title> - sets ROUTINE_TARGET to the scheduled HH:MM
   MM=$((10#${NOW##*:} + 3))
   if [ "$MM" -ge 60 ]; then MM=$((MM - 60)); HH=$(((HH + 1) % 24)); fi
   ROUTINE_TARGET=$(printf '%02d:%02d' "$HH" "$MM")
-  # no-commit typing and NO keyboard handling at all: run 17's dumps prove
-  # the BACK in hide_kb closes the whole sheet even with the IME shown, and
-  # dump 017 shows "Save routine" stays tappable in the tree with the
-  # keyboard up — so tap Save directly from the no-commit state
+  # no-commit typing (no Enter) then ESCAPE to drop the IME before Save —
+  # run 17's exact passing sequence (keyboard-up-at-Save runs never
+  # registered alarms)
   type_edit 1 "$ROUTINE_TARGET" 1 1 || { fail "routine time (routine $1)"; return 1; }
-  sleep 1
+  timeout 30 adb shell input keyevent 111 || true
+  sleep 1.5
   if ! scroll_to_text "Save routine"; then
     timeout 30 adb shell input swipe 540 1700 540 800 500
     sleep 2
