@@ -211,11 +211,11 @@ add_routine() { # <title> - sets ROUTINE_TARGET to the scheduled HH:MM
   MM=$((10#${NOW##*:} + 3))
   if [ "$MM" -ge 60 ]; then MM=$((MM - 60)); HH=$(((HH + 1) % 24)); fi
   ROUTINE_TARGET=$(printf '%02d:%02d' "$HH" "$MM")
-  # no-commit typing (no Enter) then ESCAPE to drop the IME before Save —
-  # run 17's exact passing sequence (keyboard-up-at-Save runs never
-  # registered alarms)
+  # no-commit typing (no Enter) then hide_kb — the keyboard is genuinely
+  # shown here, so BACK closes only the IME and never the sheet. Run 17's
+  # EXACT passing sequence (verified against 7ee673e).
   type_edit 1 "$ROUTINE_TARGET" 1 1 || { fail "routine time (routine $1)"; return 1; }
-  timeout 30 adb shell input keyevent 111 || true
+  hide_kb
   sleep 1.5
   if ! scroll_to_text "Save routine"; then
     timeout 30 adb shell input swipe 540 1700 540 800 500

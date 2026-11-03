@@ -478,12 +478,12 @@ if wait_for_text "Routines" 6; then
   echo "target delivery time: $TARGET"
   sleep 1
   # the time input is the form's second EditText and ships a default value;
-  # no-commit typing (no Enter — BACK can close the sheet) then ESCAPE to
-  # drop the IME before Save: run 17's exact passing sequence. Runs with the
-  # keyboard UP at Save (08e0b6d onward) never registered alarms, while every
-  # keyboard-dismissed run (13/15/16/17) did — isolate that variable.
+  # no-commit typing (no Enter) then hide_kb — the keyboard is genuinely
+  # shown here, so BACK closes only the IME and never the sheet (Enter had
+  # already hidden it in run 15, which made that BACK close the sheet).
+  # This is run 17's EXACT passing sequence — verified against 7ee673e.
   type_edit 1 "$TARGET" 1 1 || fail "routine time entry"
-  timeout 30 adb shell input keyevent 111 || true
+  hide_kb
   sleep 1.5
   if ! tap_text "Save routine"; then
     # save button may sit below the sheet fold
