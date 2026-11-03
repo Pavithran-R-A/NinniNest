@@ -8,6 +8,21 @@
 > documented release; APKs already verified on device remain correctly recorded
 > under their as-built identity (0.9.0/2) in the evidence ledger.
 
+### Fixed (certification pass, 2026-10-31 → 2026-11-03, `bbc6c59`..`e1e09a7`)
+- **Notification channel routing**: SDK 57's `WeeklyTriggerInput` carries
+  `channelId` on the TRIGGER. Content-level routing left every delivery on
+  expo's fallback channel; the dedicated `routine-reminders` channel is now
+  used (proven by `NotificationRecord … channel=routine-reminders` in cloud
+  run 41673733488's sibling run 15 evidence) — 6 regression tests.
+- **`SCHEDULE_EXACT_ALARM` declared** (was missing): Android 14 gates exact
+  alarms behind `canScheduleExactAlarms()`, which expo-notifications checks
+  before scheduling weekly reminders.
+- **Scheduling failures no longer vanish**: channel creation retries once and
+  every per-trigger failure is reported in the outcome (and logged) instead of
+  being swallowed — an intermittent zero-alarm registration on API 34 cloud
+  emulators (runs 22-26) is now visible and under diagnosis; see
+  `qa/PROGRESS_LEDGER.md`.
+
 ### Fixed
 - **Native record creation was broken** (found in the first real device run):
   Hermes does not implement `crypto.randomUUID` and no polyfill was installed,
