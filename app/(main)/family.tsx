@@ -128,12 +128,12 @@ export default function FamilyScreen() {
 
   const confirmDeleteBaby = (baby: Baby) => {
     confirmDialog(
-      'Delete this profile?',
-      `${baby.name} and every recorded event, timer, measurement, milestone, medication and vaccination for them will be permanently erased.`,
+      tr('confirm.deleteBabyTitle'),
+      tr('confirm.deleteBabyBody', { name: baby.name }),
       [
-        { text: 'Keep it', style: 'cancel' },
+        { text: tr('confirm.keepIt'), style: 'cancel' },
         {
-          text: 'Delete profile',
+          text: tr('confirm.deleteProfile'),
           style: 'destructive',
           onPress: () => void deleteBaby(baby.id),
         },
@@ -142,9 +142,9 @@ export default function FamilyScreen() {
   };
 
   const confirmDelete = (what: string, run: () => void) => {
-    confirmDialog(`Remove this ${what}?`, 'This cannot be undone.', [
-      { text: 'Keep it', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: run },
+    confirmDialog(tr('confirm.removeTitle', { what }), tr('confirm.cannotUndo'), [
+      { text: tr('confirm.keepIt'), style: 'cancel' },
+      { text: tr('confirm.remove'), style: 'destructive', onPress: run },
     ]);
   };
 
@@ -523,6 +523,7 @@ function ProfilesPanel({
   onSwitch: (id: string) => void;
 }) {
   const t = useTheme();
+  const { t: tr } = useI18n();
   return (
     <View>
       {babies.map((b) => {
@@ -565,9 +566,9 @@ function ProfilesPanel({
         );
       })}
       {!isDemo ? (
-        <Pressable onPress={onNew} accessibilityRole="button" accessibilityLabel="Add another profile" style={[styles.addCard, { borderColor: t.hairline, backgroundColor: t.surfaceAlt }]}>
+        <Pressable onPress={onNew} accessibilityRole="button" accessibilityLabel={tr('family.addAnotherProfile')} style={[styles.addCard, { borderColor: t.hairline, backgroundColor: t.surfaceAlt }]}>
           <Plus size={20} color={t.accent} strokeWidth={2.5} />
-          <Text style={[styles.addCardText, { color: t.accent }]}>Add another child</Text>
+          <Text style={[styles.addCardText, { color: t.accent }]}>{tr('family.addAnotherChild')}</Text>
         </Pressable>
       ) : null}
       {isDemo ? (

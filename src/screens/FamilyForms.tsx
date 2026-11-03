@@ -10,6 +10,7 @@ import type { Baby, GrowthRecord, MedicationRecord, MilestoneCategory, Milestone
 
 function SheetHeader({ title, onCancel, subtitle }: { title: string; onCancel: () => void; subtitle?: string }) {
   const t = useTheme();
+  const { t: tr } = useI18n();
   return (
     <View style={styles.headerRow}>
       <View style={{ flex: 1 }}>
@@ -19,7 +20,7 @@ function SheetHeader({ title, onCancel, subtitle }: { title: string; onCancel: (
       <Pressable
         onPress={onCancel}
         accessibilityRole="button"
-        accessibilityLabel="Cancel"
+        accessibilityLabel={tr('common.cancel')}
         style={styles.closeBtn}
       >
         <X size={20} color={t.inkMuted} strokeWidth={2} />
@@ -208,7 +209,7 @@ export function BabyForm({
       </Field>
       <Field label={tr('form.baby.units')}>
         <SegmentedControl
-          label="Preferred units"
+          label={tr('form.baby.units')}
           options={[
             { value: 'metric' as const, label: 'kg · cm' },
             { value: 'imperial' as const, label: 'lb · in' },
@@ -221,7 +222,7 @@ export function BabyForm({
         <PhotoSection
           previewUri={shownPhoto}
           canUsePhotos={canUsePhotos}
-          previewLabel="Baby photo preview"
+          previewLabel={tr('form.photo.babyPreview')}
           onChange={(uri) => {
             setRemovePhoto(uri === null);
             setPendingPhotoUri(uri);
@@ -229,7 +230,7 @@ export function BabyForm({
         />
       </Field>
       {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
-      <PrimaryButton label={initial ? 'Save changes' : 'Create profile'} onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
+      <PrimaryButton label={initial ? tr('form.saveChanges') : tr('form.baby.create')} onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
     </View>
   );
 }
@@ -318,16 +319,16 @@ export function GrowthForm({
         subtitle={tr('form.growth.subtitle')}
         onCancel={onCancel}
       />
-      <Field label="Date" hint={tr('form.hint.date')}>
+      <Field label={tr('form.date')} hint={tr('form.hint.date')}>
         <TextInputField label={tr('form.date')} value={date} onChangeText={setDate} maxLength={10} keyboardType="number-pad" />
       </Field>
-      <Field label={units === 'imperial' ? 'Weight (lb)' : 'Weight (kg)'}>
+      <Field label={units === 'imperial' ? tr('form.growth.weightLb') : tr('form.growth.weightKg')}>
         <TextInputField label={tr('form.growth.weight')} value={weight} onChangeText={setWeight} placeholder={units === 'imperial' ? '9.5' : '4.3'} keyboardType="decimal-pad" maxLength={7} />
       </Field>
-      <Field label={units === 'imperial' ? 'Length / height (in)' : 'Length / height (cm)'}>
+      <Field label={units === 'imperial' ? tr('form.growth.heightIn') : tr('form.growth.heightCm')}>
         <TextInputField label={tr('form.growth.height')} value={height} onChangeText={setHeight} placeholder={units === 'imperial' ? '22.4' : '57'} keyboardType="decimal-pad" maxLength={7} />
       </Field>
-      <Field label={units === 'imperial' ? 'Head circumference (in)' : 'Head circumference (cm)'}>
+      <Field label={units === 'imperial' ? tr('form.growth.headIn') : tr('form.growth.headCm')}>
         <TextInputField label={tr('form.growth.head')} value={head} onChangeText={setHead} placeholder={units === 'imperial' ? '15.7' : '40'} keyboardType="decimal-pad" maxLength={7} />
       </Field>
       <Field label={tr('form.noteOptional')}>
@@ -401,7 +402,7 @@ export function MilestoneForm({
     <View>
       <SheetHeader title={initial ? tr('form.milestone.editTitle') : tr('form.milestone.newTitle')} subtitle={tr('form.milestone.subtitle')} onCancel={onCancel} />
       <Field label={tr('form.milestone.what')}>
-        <TextInputField label={tr('form.milestone.label')} value={title} onChangeText={setTitle} placeholder="First laugh" maxLength={120} />
+        <TextInputField label={tr('form.milestone.label')} value={title} onChangeText={setTitle} placeholder={tr('form.milestone.titlePlaceholder')} maxLength={120} />
       </Field>
       <Field label={tr('form.category')}>
         <SegmentedControl label={tr('form.category')} options={MILESTONE_CATEGORIES.filter((c) => c.value !== 'custom' && c.value !== 'feeding').map((c) => ({ value: c.value, label: tr(`form.cat.${c.value}`) })).concat([{ value: 'feeding' as const, label: tr('form.cat.feeding') }]).slice(0, 5)} value={category} onChange={setCategory} />
@@ -416,7 +417,7 @@ export function MilestoneForm({
         <PhotoSection
           previewUri={shownPhoto}
           canUsePhotos={canUsePhotos}
-          previewLabel="Milestone photo preview"
+          previewLabel={tr('form.photo.milestonePreview')}
           onChange={(uri) => {
             setRemovePhoto(uri === null);
             setPendingPhotoUri(uri);
@@ -476,25 +477,25 @@ export function MedicationForm({
         subtitle={tr('form.med.subtitle')}
         onCancel={onCancel}
       />
-      <Field label={tr('form.baby.name')}>
-        <TextInputField label="Medication name" value={name} onChangeText={setName} placeholder="Vitamin D drops" maxLength={80} />
+      <Field label={tr('form.med.name')}>
+        <TextInputField label={tr('form.med.name')} value={name} onChangeText={setName} placeholder={tr('form.med.namePlaceholder')} maxLength={80} />
       </Field>
       <Field label={tr('form.med.instructionsPrescribed')}>
-        <TextInputField label="Instructions" value={instructions} onChangeText={setInstructions} placeholder="1 drop daily after feeding" maxLength={500} multiline />
+        <TextInputField label={tr('form.med.instructions')} value={instructions} onChangeText={setInstructions} placeholder={tr('form.med.instructionsPlaceholder')} maxLength={500} multiline />
       </Field>
       <Field label={tr('form.med.doseOptional')}>
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
-            <TextInputField label="Dose amount" value={dose} onChangeText={setDose} placeholder="0.5" keyboardType="decimal-pad" maxLength={7} />
+            <TextInputField label={tr('form.med.doseAmount')} value={dose} onChangeText={setDose} placeholder="0.5" keyboardType="decimal-pad" maxLength={7} />
           </View>
           <View style={{ width: 130 }}>
             <SegmentedControl
-              label="Dose unit"
+              label={tr('form.med.doseUnit')}
               options={[
                 { value: 'ml' as const, label: 'mL' },
                 { value: 'mg' as const, label: 'mg' },
-                { value: 'drops' as const, label: 'drops' },
-                { value: 'tablets' as const, label: 'tabs' },
+                { value: 'drops' as const, label: tr('form.med.unitDrops') },
+                { value: 'tablets' as const, label: tr('form.med.unitTabs') },
               ]}
               value={unit}
               onChange={setUnit}
@@ -503,7 +504,7 @@ export function MedicationForm({
         </View>
       </Field>
       <Field label={tr('form.notesOptional')}>
-        <TextInputField label="Medication notes" value={notes} onChangeText={setNotes} maxLength={500} multiline />
+        <TextInputField label={tr('form.med.notes')} value={notes} onChangeText={setNotes} maxLength={500} multiline />
       </Field>
       {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
       <PrimaryButton label={tr('form.med.save')} onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
@@ -555,23 +556,23 @@ export function VaccinationForm({
     <View>
       <SheetHeader
         title={tr('form.vax.title')}
-        subtitle="Record what was given. The app does not advise on schedules."
+        subtitle={tr('form.vax.subtitle')}
         onCancel={onCancel}
       />
       <Field label={tr('form.vax.name')}>
-        <TextInputField label="Vaccine name" value={name} onChangeText={setName} placeholder="Hepatitis B" maxLength={120} />
+        <TextInputField label={tr('form.vax.name')} value={name} onChangeText={setName} placeholder={tr('form.vax.namePlaceholder')} maxLength={120} />
       </Field>
-      <Field label="Date given" hint={tr('form.hint.date')}>
-        <TextInputField label="Date given" value={dateGiven} onChangeText={setDateGiven} maxLength={10} keyboardType="number-pad" />
+      <Field label={tr('form.vax.dateGiven')} hint={tr('form.hint.date')}>
+        <TextInputField label={tr('form.vax.dateGiven')} value={dateGiven} onChangeText={setDateGiven} maxLength={10} keyboardType="number-pad" />
       </Field>
-      <Field label="Next appointment (optional)" hint={tr('form.hint.date')}>
-        <TextInputField label="Next appointment" value={nextAppointment} onChangeText={setNextAppointment} maxLength={10} keyboardType="number-pad" />
+      <Field label={tr('form.vax.nextOptional')} hint={tr('form.hint.date')}>
+        <TextInputField label={tr('form.vax.nextAppointment')} value={nextAppointment} onChangeText={setNextAppointment} maxLength={10} keyboardType="number-pad" />
       </Field>
       <Field label={tr('form.vax.providerOptional')}>
-        <TextInputField label="Provider" value={provider} onChangeText={setProvider} placeholder="Clinic name" maxLength={120} />
+        <TextInputField label={tr('form.vax.provider')} value={provider} onChangeText={setProvider} placeholder={tr('form.vax.clinic')} maxLength={120} />
       </Field>
       <Field label={tr('form.notesOptional')}>
-        <TextInputField label="Vaccination notes" value={notes} onChangeText={setNotes} maxLength={500} multiline />
+        <TextInputField label={tr('form.vax.notes')} value={notes} onChangeText={setNotes} maxLength={500} multiline />
       </Field>
       {error && <Text style={[styles.error, { color: t.cinnamon }]}>{error}</Text>}
       <PrimaryButton label={tr('form.vax.save')} onPress={save} style={{ marginTop: spacing(3), minHeight: 52 }} />
@@ -633,18 +634,18 @@ export function RoutineForm({
   return (
     <View>
       <SheetHeader
-        title="Daily routine"
+        title={tr('form.routine.title')}
         subtitle={tr('form.routine.subtitle')}
         onCancel={onCancel}
       />
-      <Field label={tr('form.baby.name')}>
-        <TextInputField label="Routine name" value={title} onChangeText={setTitle} placeholder="Morning feed" maxLength={80} />
+      <Field label={tr('form.routine.name')}>
+        <TextInputField label={tr('form.routine.name')} value={title} onChangeText={setTitle} placeholder={tr('form.routine.namePlaceholder')} maxLength={80} />
       </Field>
-      <Field label={tr('form.vax.type')}>
-        <SegmentedControl label="Type" options={ROUTINE_KINDS} value={kind} onChange={setKind} />
+      <Field label={tr('form.routine.type')}>
+        <SegmentedControl label={tr('form.routine.type')} options={ROUTINE_KINDS.map((k) => ({ value: k.value, label: tr(`form.routine.kind.${k.value}`) }))} value={kind} onChange={setKind} />
       </Field>
-      <Field label="Time of day" hint={tr('form.routine.timeHint')}>
-        <TextInputField label="Time of day" value={timeOfDay} onChangeText={setTimeOfDay} maxLength={5} keyboardType="number-pad" />
+      <Field label={tr('form.routine.timeOfDay')} hint={tr('form.routine.timeHint')}>
+        <TextInputField label={tr('form.routine.timeOfDay')} value={timeOfDay} onChangeText={setTimeOfDay} maxLength={5} keyboardType="number-pad" />
       </Field>
       <Field label={tr('form.routine.days')}>
         <View style={styles.daysRow}>
@@ -656,7 +657,7 @@ export function RoutineForm({
                 onPress={() => toggleDay(idx)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: on }}
-                accessibilityLabel={`${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][idx]}${on ? ' selected' : ''}`}
+                accessibilityLabel={`${tr(`date.day${idx}`)}${on ? ` ${tr('common.selected')}` : ''}`}
                 style={[styles.dayChip, { backgroundColor: on ? t.accent : t.surfaceAlt, borderColor: t.hairline }]}
               >
                 <Text style={[styles.dayChipText, { color: on ? t.accentInk : t.inkMuted }]}>{label}</Text>

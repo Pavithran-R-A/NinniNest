@@ -74,20 +74,20 @@ export default function SettingsScreen() {
     const plan = planImport(json, data, importMode);
     if (!plan.ok) {
       const errors = plan.issues.filter((i) => i.severity === 'error');
-      confirmDialog('This backup cannot be imported', errors.map((e) => e.message).join('\n'), [
-        { text: 'OK' },
+      confirmDialog(tr('settings.rejTitle'), errors.map((e) => e.message).join('\n'), [
+        { text: tr('common.ok') },
       ]);
       return;
     }
     const summary = describeImportPlan(plan);
     const warnings = plan.issues.filter((i) => i.severity === 'warning');
     confirmDialog(
-      'Review this import',
-      `${summary}.${warnings.length ? '\n\n' + warnings.map((w) => w.message).join('\n') : ''}\n\nMode: ${importMode === 'merge' ? 'Merge — keep everything, add new records only' : 'Replace — erase current records first'}. Continue?`,
+      tr('settings.reviewImportTitle'),
+      `${summary}.${warnings.length ? '\n\n' + warnings.map((w) => w.message).join('\n') : ''}\n\n${tr('settings.modeLine', { mode: importMode === 'merge' ? tr('settings.modeMergeDetail') : tr('settings.modeReplaceDetail') })} ${tr('settings.continueQ')}`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: tr('common.cancel'), style: 'cancel' },
         {
-          text: 'Import',
+          text: tr('settings.importGo'),
           onPress: async () => {
             try {
               const result = await runStagedBackupImport(repo, plan, {
@@ -140,16 +140,16 @@ export default function SettingsScreen() {
 
   const confirmErase = () => {
     confirmDialog(
-      'Erase all data?',
-      'This permanently deletes every baby profile and care record on this device. It cannot be undone.',
+      tr('settings.eraseTitle'),
+      tr('settings.eraseBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: tr('common.cancel'), style: 'cancel' },
         {
-          text: 'Erase everything',
+          text: tr('settings.eraseEverything'),
           style: 'destructive',
           onPress: async () => {
             await resetPersonal();
-            setMessage('All data erased.');
+            setMessage(tr('settings.allErased'));
           },
         },
       ]
@@ -159,16 +159,16 @@ export default function SettingsScreen() {
   const confirmDemo = () => {
     if (isDemo) {
       void exitDemo().then(() => {
-        setMessage('Demo ended. Your own records are back, exactly as you left them.');
+        setMessage(tr('settings.demoEnded'));
       });
       return;
     }
     confirmDialog(
-      'Try demo mode?',
-      'Demo mode fills the app with clearly-labelled synthetic records in a separate storage space. Your real data stays untouched, and exiting brings it back.',
+      tr('settings.demoTitle'),
+      tr('settings.demoBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Start demo', onPress: async () => { await enterDemo(); setMessage('Demo mode is on. Records are marked as demo.'); } },
+        { text: tr('common.cancel'), style: 'cancel' },
+        { text: tr('settings.demoStart'), onPress: async () => { await enterDemo(); setMessage(tr('settings.demoOn')); } },
       ]
     );
   };
