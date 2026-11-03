@@ -382,7 +382,6 @@ PY
 node qa/tools/craft-backup.mjs qa-photo.png crafted-seed.json
 timeout 60 adb push crafted-seed.json /sdcard/Download/crafted-seed.json >/dev/null 2>&1
 if goto_tab settings 6; then
-  tap_text "Settings"
   sleep 2
   if scroll_to_text "Import a backup"; then
     if pick_download_file "crafted-seed.json"; then
@@ -451,8 +450,9 @@ goto_tab() { # <route> <tab index 1-6> — deterministic navigation: deep link
   sleep 3
   return 0
 }
-# unwind any open picker/sheet so later sections start from a clean state
-restart_app
+# NO restart unwind here: force-stop+relaunch wedges the app's accessibility
+# bridge (dumps die in NinniNest while the picker app still dumps fine —
+# runs 22-31), and section 4's goto_tab handles navigation from any state.
 
 # ------------------------------------------------------------ notifications ---
 echo "=== 4. notification: schedule + backgrounded delivery ==="
@@ -566,7 +566,6 @@ cat > malformed.json <<'JSON'
 JSON
 timeout 60 adb push malformed.json /sdcard/Download/malformed.json >/dev/null 2>&1
 if goto_tab settings 6; then
-  tap_text "Settings"
   sleep 2
   if scroll_to_text "Import a backup"; then
     if pick_download_file "malformed.json"; then
