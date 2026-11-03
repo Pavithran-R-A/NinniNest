@@ -610,7 +610,14 @@ if goto_tab settings 6; then
     sleep 3
     EXPORT_NAME=$(timeout 30 adb shell run-as $PKG ls cache 2>/dev/null | tr -d '\r' | grep -oE 'ninninest-backup-[0-9-]+\.json' | tail -1)
     if [ -z "$EXPORT_NAME" ]; then
-      echo "no ninninest-backup-*.json in app cache"
+      echo "no ninninest-backup-*.json in app cache; retrying once"
+      sleep 4
+      EXPORT_NAME=$(timeout 30 adb shell run-as $PKG ls cache 2>/dev/null | tr -d '\r' | grep -oE 'ninninest-backup-[0-9-]+\.json' | tail -1)
+    fi
+    # diagnostics for the record
+    timeout 30 adb shell run-as $PKG ls cache > "$OUT/cache-listing.txt" 2>&1 || true
+    if [ -z "$EXPORT_NAME" ]; then
+      echo "still no export file in cache (see cache-listing.txt)"
       fail "true export capture/verify"
     fi
     if [ -n "$EXPORT_NAME" ]; then
@@ -877,7 +884,8 @@ echo "=== 9. delete-baby cascade (create QA4, delete it, siblings untouched) ===
 if wait_for_text "Family" 6; then
   tap_text "Family"
   sleep 2
-  if tap_text "Add another child"; then
+  # with the seeded babies the add card sits below the fold
+  if scroll_to_text "Add another child"; then
     sleep 3
     type_edit_v 0 "QA4" || fail "QA4 name"
     type_edit_v 1 "2026-10-05" || fail "QA4 dob"
