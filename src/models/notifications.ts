@@ -129,6 +129,12 @@ export async function syncRoutineNotifications(
       );
     }
   }
+  // Diagnosability: the outcome is consumed in-memory today; a log line makes
+  // scheduling failures visible in logcat during device/cloud QA (cloud runs
+  // 23-25 showed every trigger failing with the reason swallowed here).
+  if (outcome.skipped.length > 0 || outcome.permissionDenied) {
+    console.log('[notifications] schedule outcome', JSON.stringify(outcome));
+  }
   return outcome;
 }
 

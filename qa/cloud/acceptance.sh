@@ -433,6 +433,8 @@ restart_app() {
     fi
     sleep 2
   done
+  # warm up uiautomator (the first dump after a cold restart can wedge)
+  dump >/dev/null 2>&1 || true
 }
 # Ensure the app is foreground with the given tab text visible; relaunch once
 # if the first wait fails (transient background/cold-restart states).
