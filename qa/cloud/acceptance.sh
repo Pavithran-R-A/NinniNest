@@ -506,6 +506,10 @@ if wait_for_text "Routines" 6; then
       # diagnostic for the record: the routine-* alarm section of dumpsys
       timeout 30 adb shell dumpsys alarm > "$OUT/alarm-dump-on-failure.txt" 2>/dev/null || true
       grep -E "routine-|RTC" "$OUT/alarm-dump-on-failure.txt" > "$OUT/alarm-routines.txt" 2>/dev/null || true
+      # the app reports schedule outcomes on the JS console (skipped reasons):
+      # capture the scheduler-relevant logcat at the failure moment
+      timeout 30 adb logcat -d -s ReactNativeJS:* expo:* ExpoModulesConsole:* > "$OUT/rn-scheduler.txt" 2>/dev/null || true
+      grep -iE "notifications|schedule|routine" "$OUT/rn-scheduler.txt" > "$OUT/rn-scheduler-lines.txt" 2>/dev/null || true
     fi
     timeout 30 adb shell input keyevent 3
     sleep 2
