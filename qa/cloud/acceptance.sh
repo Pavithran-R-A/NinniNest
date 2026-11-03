@@ -277,6 +277,39 @@ scroll_to_text() { # <text> - tap on sight; to top, then page down
 }
 
 # ------------------------------------------------------------------ launch ---
+# Deterministic clean state: force-stop + relaunch instead of BACK presses
+# (BACK can pop the tab stack or background the app into transient states).
+restart_app() {
+  timeout 30 adb shell am force-stop $PKG
+  sleep 2
+  timeout 30 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+  sleep 12
+  # wait for the app window to actually hold focus before returning
+  for _ in 1 2 3 4 5 6; do
+    if timeout 20 adb shell dumpsys window 2>/dev/null | grep -q "Focus.*$PKG"; then
+      break
+    fi
+    sleep 2
+  done
+  # warm up uiautomator (the first dump after a cold restart can wedge)
+  dump >/dev/null 2>&1 || true
+}
+# Ensure the app is foreground with the given tab text visible; relaunch once
+# if the first wait fails (transient background/cold-restart states).
+goto_tab() { # <route> <tab index 1-6> — deterministic navigation: deep link
+  # then a coordinate tap on the pixel_5 tab bar (six tabs across 1080px,
+  # centers at x=90+180*(n-1), y=2280). No dump gate here — when the
+  # accessibility layer wedges after restarts, dump-based verification
+  # false-negatives while the UI is actually fine (run 30 screenshot);
+  # the caller's scroll_to_text fails honestly if the screen is wrong.
+  local route="$1" idx="$2"
+  timeout 30 adb shell am start -a android.intent.action.VIEW -d "ninninest://$route" >/dev/null 2>&1
+  sleep 5
+  timeout 30 adb shell input tap $((90 + 180 * (idx - 1))) 2280
+  sleep 3
+  return 0
+}
+
 echo "=== 1. cold launch + permission + onboarding ==="
 # Cloud-runner ANRs: the Pixel Launcher ANRs chronically under 2-core KVM
 # contention (dumps in run 7 show its dialog stealing the active window
@@ -418,38 +451,6 @@ if goto_tab settings 6; then
 else
   fail "settings tab (seed)"
 fi
-# Deterministic clean state: force-stop + relaunch instead of BACK presses
-# (BACK can pop the tab stack or background the app into transient states).
-restart_app() {
-  timeout 30 adb shell am force-stop $PKG
-  sleep 2
-  timeout 30 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-  sleep 12
-  # wait for the app window to actually hold focus before returning
-  for _ in 1 2 3 4 5 6; do
-    if timeout 20 adb shell dumpsys window 2>/dev/null | grep -q "Focus.*$PKG"; then
-      break
-    fi
-    sleep 2
-  done
-  # warm up uiautomator (the first dump after a cold restart can wedge)
-  dump >/dev/null 2>&1 || true
-}
-# Ensure the app is foreground with the given tab text visible; relaunch once
-# if the first wait fails (transient background/cold-restart states).
-goto_tab() { # <route> <tab index 1-6> — deterministic navigation: deep link
-  # then a coordinate tap on the pixel_5 tab bar (six tabs across 1080px,
-  # centers at x=90+180*(n-1), y=2280). No dump gate here — when the
-  # accessibility layer wedges after restarts, dump-based verification
-  # false-negatives while the UI is actually fine (run 30 screenshot);
-  # the caller's scroll_to_text fails honestly if the screen is wrong.
-  local route="$1" idx="$2"
-  timeout 30 adb shell am start -a android.intent.action.VIEW -d "ninninest://$route" >/dev/null 2>&1
-  sleep 5
-  timeout 30 adb shell input tap $((90 + 180 * (idx - 1))) 2280
-  sleep 3
-  return 0
-}
 # NO restart unwind here: force-stop+relaunch wedges the app's accessibility
 # bridge (dumps die in NinniNest while the picker app still dumps fine —
 # runs 22-31), and section 4's goto_tab handles navigation from any state.
