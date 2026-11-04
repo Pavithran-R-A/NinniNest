@@ -540,6 +540,10 @@ if wait_for_text "Routines" 6; then
       pass "notification delivered to tray while backgrounded (routine-reminders channel)"
     else
       fail "notification delivered on routine-reminders channel"
+      # diagnostics: did the alarm fire? what did the scheduler log?
+      timeout 30 adb shell dumpsys alarm > "$OUT/alarm-on-delivery-failure.txt" 2>/dev/null || true
+      grep -E "routine-|Fired|RTC" "$OUT/alarm-on-delivery-failure.txt" > "$OUT/alarm-delivery-diag.txt" 2>/dev/null || true
+      timeout 30 adb logcat -d -s ReactNativeJS:* expo:* > "$OUT/rn-delivery-diag.txt" 2>/dev/null || true
     fi
   fi
   shot "05-notification"

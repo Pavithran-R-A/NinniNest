@@ -71,11 +71,14 @@ risk record.
     emulator/cloud evidence as emulator evidence, never as hardware proof.
 12. **Web photo durability**: web picker flows remain limited vs native
     (records-only photo behavior documented in the result messages).
-13. **Form-level strings outside Family photo flows remain English-only**
-    (Growth/Medication/Vaccination/Routine forms and Settings dialogs use
-    hardcoded English); the en/ta packs cover navigation, Today, Journal,
-    Handoff, Insights labels and the new photo/import messages, with runtime
-    English fallback documented. Completing the sweep is backlog.
+13. **QuickLog and EventEditSheet strings remain English-only** (the diaper/
+    bottle/pump quick-log sheets and the entry edit sheet use hardcoded
+    English). COMPLETED in the 2026-11-04 sweep (`59d2509`, 4 i18n regression
+    tests): Growth, Medication, Vaccination and Routine forms, the baby/
+    milestone form furniture, weekday accessibility labels, and every
+    Settings/family confirmation dialog (delete-profile, remove, erase,
+    demo, import review/rejection) are fully en+ta. English fallback for any
+    future key remains documented runtime behavior.
 
 ## Unresolved before store submission (owner-level)
 

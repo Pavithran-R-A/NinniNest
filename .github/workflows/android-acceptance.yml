@@ -10,6 +10,11 @@ name: android-acceptance
 
 on:
   workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Optional exact commit SHA to certify (must have an android-qa-build artifact). Defaults to the branch tip.'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -22,7 +27,7 @@ jobs:
       - name: Checkout exact release-branch commit
         uses: actions/checkout@v4
         with:
-          ref: release/ninninest-safety-zcode-20261026
+          ref: ${{ inputs.sha || 'release/ninninest-safety-zcode-20261026' }}
 
       - name: Prove the failure mechanism (deliberate failing test must exit 1)
         run: |
@@ -55,7 +60,7 @@ jobs:
       - name: Checkout exact release-branch commit
         uses: actions/checkout@v4
         with:
-          ref: release/ninninest-safety-zcode-20261026
+          ref: ${{ inputs.sha || 'release/ninninest-safety-zcode-20261026' }}
 
       - name: Record HEAD SHA
         id: sha
@@ -111,7 +116,7 @@ jobs:
       - name: Checkout exact release-branch commit
         uses: actions/checkout@v4
         with:
-          ref: release/ninninest-safety-zcode-20261026
+          ref: ${{ inputs.sha || 'release/ninninest-safety-zcode-20261026' }}
 
       - uses: actions/setup-java@v4
         with:
@@ -168,7 +173,7 @@ jobs:
       - name: Checkout exact release-branch commit
         uses: actions/checkout@v4
         with:
-          ref: release/ninninest-safety-zcode-20261026
+          ref: ${{ inputs.sha || 'release/ninninest-safety-zcode-20261026' }}
 
       - uses: actions/setup-java@v4
         with:
